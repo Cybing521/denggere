@@ -237,6 +237,22 @@ ODE采用显式Euler积分（日步长），气象数据月度恒定。
 排除2014后，病例相关系数从 $r=-0.02$ 大幅提升至 $r=0.59$（$p<10^{-15}$），
 表明模型成功捕捉了登革热传播的季节性和年际变化规律。
 
+\subsubsection{综合可视化}
+
+图\ref{fig:phase1}展示了Phase 1的完整结果，包括蚊虫种群拟合、病例拟合、
+NN学到的产卵率模式以及训练过程。
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{../results/figures/phase1_coupled_model.png}
+    \caption{Phase 1 神经网络耦合动力学模型综合结果。
+    \textbf{第一行}：BI拟合（左）、病例拟合（中）、病例对数尺度（右）。
+    \textbf{第二行}：NN产卵率时间序列（左）、产卵率vs温度散点（中）、蚊虫种群动态（右）。
+    \textbf{第三行}：NN学到的产卵率热力图（左）、年度病例对比（中）、预测vs实际散点（右）。
+    \textbf{第四行}：训练损失曲线（左）、BI散点（中）、模型框架总结（右）。}
+    \label{fig:phase1}
+\end{figure}
+
 \subsubsection{分年度分析}
 
 \begin{table}[H]
@@ -333,6 +349,20 @@ ODE采用显式Euler积分（日步长），气象数据月度恒定。
 物理上，该函数在低温端产卵率较高（反映越冬卵储备），
 在中高温区迅速下降（反映快速发育消耗），
 与NN学到的非线性模式一致。
+
+\subsubsection{符号回归综合可视化}
+
+图\ref{fig:phase2}展示了Phase 2的完整符号回归结果。
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{../results/figures/phase2_formula_discovery.png}
+    \caption{Phase 2 符号回归结果。
+    \textbf{第一行}：候选公式R²对比（左）、最优公式vs NN输出散点（中）、温度响应曲线（右）。
+    \textbf{第二行}：降水响应曲线（左）、公式热力图T$\times$R（中）、残差分布（右）。
+    \textbf{第三行}：NN vs 公式时间序列（左）、动力学验证（中）、模型总结（右）。}
+    \label{fig:phase2}
+\end{figure}
 
 %=============================================================================
 \section{讨论}
@@ -442,26 +472,6 @@ CCM14: Mosquito surveillance data in China.
 
 %=============================================================================
 \appendix
-\section{模型可视化}
-%=============================================================================
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=\textwidth]{../results/figures/phase1_coupled_model.png}
-    \caption{Phase 1: 神经网络耦合动力学模型结果。
-    包含BI拟合、病例拟合（线性和对数尺度）、NN学到的产卵率、
-    蚊虫种群动态、NN热力图、年度对比、训练损失等。}
-    \label{fig:phase1}
-\end{figure}
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=\textwidth]{../results/figures/phase2_formula_discovery.png}
-    \caption{Phase 2: 符号回归结果。
-    包含候选公式对比、温度/降水响应曲线、NN vs 公式对比、残差分布等。}
-    \label{fig:phase2}
-\end{figure}
-
 \section{代码与数据}
 
 所有代码和数据存放于 \texttt{v1\_nn\_coupled\_dynamics/} 目录：
