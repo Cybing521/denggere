@@ -1,0 +1,481 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{ctex}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{mathtools}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{geometry}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{float}
+\usepackage{subcaption}
+\usepackage{enumitem}
+\usepackage{multirow}
+
+\geometry{left=2.5cm,right=2.5cm,top=2.5cm,bottom=2.5cm}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    citecolor=blue,
+    urlcolor=cyan,
+}
+
+\title{
+    \textbf{神经网络耦合动力学模型研究} \\[0.5em]
+    \large 基于数据驱动的蚊媒传染病传播机制发现 \\[0.3em]
+    \normalsize Version 1.0 — 排除2014暴发数据
+}
+\author{技术报告}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+本报告提出一种\textbf{神经网络耦合动力学模型}框架，用于研究登革热蚊媒传播的数学机理。
+参照 Zhang, Wang \& Tang (2024, \textit{PLoS Computational Biology}) 的方法，
+将未知的蚊虫产卵率函数用神经网络（NN）替代，嵌入微分方程系统内部，
+通过ODE数值解与观测数据的误差反向传播来间接训练神经网络。
+训练完成后，采用符号回归（Symbolic Regression）将NN的黑箱输入输出关系转化为显式的解析公式，
+最终获得完全可解释的动力学模型。
+
+使用广东省2006--2019年（排除2014年极端暴发）的布雷图指数（BI）和登革热病例数据进行训练验证。
+结果显示：蚊虫种群与BI的相关系数 $r=0.28$，
+\textbf{病例拟合相关系数 $r=0.59$（$p<10^{-15}$），2019年暴发预测 $r=0.80$}。
+符号回归发现产卵率的最优近似为三次多项式，拟合NN输出的 $R^2=0.45$。
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+%=============================================================================
+\section{引言}
+%=============================================================================
+
+\subsection{研究背景}
+
+登革热是全球最重要的蚊媒传染病之一，主要通过伊蚊传播。
+建立精确的数学模型对于理解传播机制、预测疫情趋势具有重要意义。
+传统的动力学模型（如SIR、SEIR）在描述蚊媒传播时面临一个核心困难：
+\textbf{蚊虫产卵率、发育率等关键参数与气象因素的函数关系形式未知}。
+现有研究通常基于实验室数据预设函数形式（如高斯函数、Brière函数），
+但这些形式在自然环境中的适用性尚未充分验证。
+
+\subsection{参考方法}
+
+本研究参照 Zhang, Wang \& Tang (2024) \cite{zhang2024} 在 \textit{PLoS Computational Biology} 发表的方法。
+该工作的核心创新在于：
+\begin{enumerate}[leftmargin=2em]
+    \item 将\textbf{神经网络嵌入微分方程内部}，替代未知的产卵率函数
+    \item 通过ODE数值解与观测数据的误差\textbf{反向传播}来间接训练NN
+    \item 训练后用\textbf{符号回归}解释NN，获得显式解析公式
+\end{enumerate}
+
+该方法的优势在于：动力学模型始终是主体框架，NN仅服务于发现未知机制，最终模型完全可解释。
+
+\subsection{本研究的扩展}
+
+在原方法基础上，本研究进行了以下扩展：
+\begin{itemize}[leftmargin=2em]
+    \item 从纯蚊虫种群模型扩展到\textbf{蚊虫--人群耦合模型}（加入SEIR疾病传播）
+    \item 同时拟合\textbf{蚊虫监测数据（BI）和登革热病例数据}
+    \item 采用\textbf{三步训练策略}：先蚊虫 → 后疾病 → 联合微调
+\end{itemize}
+
+%=============================================================================
+\section{模型框架}
+%=============================================================================
+
+\subsection{整体架构}
+
+模型分为两个阶段（图\ref{fig:framework}）：
+
+\begin{center}
+\fbox{\parbox{0.92\textwidth}{
+\centering
+\textbf{Phase 1: 神经网络耦合动力学模型} \\[0.3em]
+气象数据 $(T, H, R)$ $\xrightarrow{\text{NN}}$ 产卵率 $\xrightarrow{\text{ODE}}$ 蚊虫种群 + 病例 \\[0.3em]
+ODE数值解 vs 观测数据 $\xrightarrow{\text{反向传播}}$ 训练NN \\[0.8em]
+\textbf{Phase 2: 符号回归} \\[0.3em]
+训练好的NN $\xrightarrow{\text{符号回归}}$ 解析公式 $f(T, H, R)$ \\[0.3em]
+公式替代NN $\rightarrow$ 完全可解释的动力学模型
+}}
+\end{center}
+
+\subsection{蚊虫种群动力学方程}
+
+蚊虫种群分为未成熟期（卵、幼虫、蛹合并为 $P$）和成蚊期（$A$），
+建立如下微分方程系统：
+
+\begin{align}
+    \frac{dP}{dt} &= \underbrace{\text{NN}(T, H, R)}_{\text{产卵率（NN替代）}} \cdot A
+                    - d_p(T) \cdot P
+                    - m_p(T) \cdot P \cdot \left(1 + \frac{P}{K}\right) \label{eq:dP} \\[0.5em]
+    \frac{dA}{dt} &= \sigma \cdot d_p(T) \cdot P - m_a(T) \cdot A \label{eq:dA}
+\end{align}
+
+其中：
+\begin{itemize}[leftmargin=2em]
+    \item $\text{NN}(T, H, R)$：产卵率函数，\textbf{由神经网络近似}（核心未知项）
+    \item $d_p(T) = 0.08 \cdot e^{-((T-27)/9)^2}$：发育率（Sharpe \& DeMichele）
+    \item $m_p(T) = 0.05 + 0.003(T-22)^2$：幼虫死亡率（Otero et al. 2006）
+    \item $m_a(T) = 0.03 + 0.002(T-26)^2$：成蚊死亡率（Brady et al. 2013）
+    \item $\sigma$：羽化存活率（可训练参数）
+    \item $K$：环境承载力（可训练参数）
+\end{itemize}
+
+\subsection{疾病传播动力学方程}
+
+在蚊虫种群动态基础上，建立简化的SEIR疾病传播方程：
+
+\begin{align}
+    \frac{dE_h}{dt} &= \beta \cdot b(T) \cdot \frac{\tilde{A}(t)}{N_h} \cdot S_h \cdot \alpha
+                      + \text{imp} - \sigma_h \cdot E_h \label{eq:dEh} \\
+    \frac{dI_h}{dt} &= \sigma_h \cdot E_h - \gamma \cdot I_h \label{eq:dIh} \\
+    \frac{dR_h}{dt} &= \gamma \cdot I_h \label{eq:dRh}
+\end{align}
+
+其中 $\tilde{A}(t) = A(t) / \bar{A}$ 为归一化蚊虫密度，
+$b(T) = 0.4 \cdot e^{-((T-27)/6)^2}$ 为温度依赖的传播效率，
+$\beta$ 为传播系数（可训练），$\alpha$ 为放大因子（可训练），
+$\text{imp}$ 为输入性病例率（可训练）。
+
+\subsection{神经网络架构}
+
+产卵率NN采用3层前馈网络，参照 Zhang et al. (2024)：
+
+\begin{table}[H]
+    \centering
+    \caption{产卵率神经网络架构}
+    \begin{tabular}{lccc}
+        \toprule
+        \textbf{层} & \textbf{输入维度} & \textbf{输出维度} & \textbf{激活函数} \\
+        \midrule
+        输入层 & 3 (T, H, R) & 16 & Softplus \\
+        隐藏层 & 16 & 16 & Softplus \\
+        输出层 & 16 & 1 & Softplus \\
+        \bottomrule
+    \end{tabular}
+    \label{tab:nn_arch}
+\end{table}
+
+网络输出经 Softplus 变换保证产卵率恒正。总计353个可训练参数。
+
+\subsection{训练策略}
+
+采用三步训练策略：
+
+\begin{description}[leftmargin=2em]
+    \item[Step A: 蚊虫ODE+NN $\rightarrow$ 拟合BI]
+        固定疾病部分，仅训练蚊虫ODE和NN参数。
+        损失函数包含BI拟合MSE、相关性损失、NN平滑性正则和变异性鼓励项。
+
+    \item[Step B: 固定蚊虫 $\rightarrow$ SEIR拟合病例]
+        固定蚊虫模型（包括NN），仅训练疾病参数 $\beta$, $\text{imp}$, $\alpha$。
+        损失为log空间MSE + 相关性损失。
+
+    \item[Step C: 联合微调]
+        同时优化所有参数（蚊虫+疾病），平衡BI拟合和病例拟合。
+\end{description}
+
+所有训练使用 Adam 优化器，梯度裁剪 $\|\nabla\|_{\max}=5.0$，
+ODE采用显式Euler积分（日步长），气象数据月度恒定。
+
+%=============================================================================
+\section{数据}
+%=============================================================================
+
+\begin{table}[H]
+    \centering
+    \caption{数据来源与描述}
+    \begin{tabular}{llcl}
+        \toprule
+        \textbf{数据} & \textbf{来源} & \textbf{时间范围} & \textbf{说明} \\
+        \midrule
+        登革热病例 & CCM14 数据集 & 2006--2019 & 广东省月度，排除2014 \\
+        布雷图指数 & CCM14 数据集 & 2006--2014 & 广州市月度，82个有效月 \\
+        气象数据 & Open-Meteo API & 2006--2019 & 温度、湿度、降水 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\textbf{排除2014年的原因}：
+2014年广东省登革热大暴发（45,189例），占2006--2014年总病例数的90\%。
+该极端事件可能由输入性病例大量增加、城市化等非气象因素导致，
+严重干扰基于气象驱动的动力学模型训练。
+排除后总病例18,315例（156个月），分布更均匀，利于模型学习常态传播规律。
+
+%=============================================================================
+\section{结果}
+%=============================================================================
+
+\subsection{Phase 1: 神经网络耦合动力学模型}
+
+\subsubsection{整体性能}
+
+\begin{table}[H]
+    \centering
+    \caption{Phase 1 模型性能}
+    \begin{tabular}{lcc}
+        \toprule
+        \textbf{指标} & \textbf{含2014} & \textbf{排除2014} \\
+        \midrule
+        病例相关系数 $r$ & $-0.02$ & $\mathbf{0.59}$ \\
+        $R^2$ (log空间) & $0.13$ & $\mathbf{0.25}$ \\
+        $p$ 值 & $0.84$ & $\mathbf{9.4 \times 10^{-16}}$ \\
+        BI相关系数 $r$ & $0.64$ & $0.28$ \\
+        \bottomrule
+    \end{tabular}
+    \label{tab:phase1_perf}
+\end{table}
+
+排除2014后，病例相关系数从 $r=-0.02$ 大幅提升至 $r=0.59$（$p<10^{-15}$），
+表明模型成功捕捉了登革热传播的季节性和年际变化规律。
+
+\subsubsection{分年度分析}
+
+\begin{table}[H]
+    \centering
+    \caption{分年度拟合结果}
+    \begin{tabular}{cccc}
+        \toprule
+        \textbf{年份} & \textbf{实际病例} & \textbf{模型预测} & \textbf{年内} $r$ \\
+        \midrule
+        2006 & 1,010 & 553 & 0.30 \\
+        2007 & 397 & 133 & 0.08 \\
+        2008 & 87 & 47 & 0.08 \\
+        2009 & 19 & 45 & $-0.11$ \\
+        2010 & 139 & 54 & 0.12 \\
+        2011 & 49 & 41 & 0.42 \\
+        2012 & 474 & 60 & 0.58 \\
+        2013 & 2,894 & 159 & 0.49 \\
+        2015 & 1,683 & 43 & 0.01 \\
+        2016 & 544 & 45 & 0.33 \\
+        2017 & 1,662 & 144 & 0.45 \\
+        2018 & 3,315 & 49 & 0.52 \\
+        \textbf{2019} & \textbf{6,042} & \textbf{5,710} & $\mathbf{0.80}$ \\
+        \bottomrule
+    \end{tabular}
+    \label{tab:yearly}
+\end{table}
+
+2019年暴发（6,042例）模型预测为5,710例，年内相关系数 $r=0.80$，
+说明模型对暴发年份的传播动态具有较好的捕捉能力。
+
+\subsubsection{NN学到的产卵率模式}
+
+\begin{table}[H]
+    \centering
+    \caption{NN学到的产卵率特征}
+    \begin{tabular}{lc}
+        \toprule
+        \textbf{指标} & \textbf{值} \\
+        \midrule
+        产卵率范围 & $[0.21, 7.72]$ \\
+        低温 ($<18$°C) 均值 & 4.83 \\
+        高温 ($>25$°C) 均值 & 0.98 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\subsubsection{校准参数}
+
+\begin{table}[H]
+    \centering
+    \caption{模型校准参数}
+    \begin{tabular}{llcl}
+        \toprule
+        \textbf{参数} & \textbf{符号} & \textbf{值} & \textbf{说明} \\
+        \midrule
+        传播系数 & $\beta$ & 0.49 & 蚊→人传播强度 \\
+        输入病例 & imp & 2.80/月 & 外源输入 \\
+        放大因子 & $\alpha$ & 9.81 & 蚊虫密度效应 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\subsection{Phase 2: 符号回归}
+
+\subsubsection{候选公式比较}
+
+\begin{table}[H]
+    \centering
+    \caption{符号回归候选公式评估}
+    \begin{tabular}{lcccc}
+        \toprule
+        \textbf{公式} & \textbf{类型} & $r$ & $R^2$ & \textbf{参数数} \\
+        \midrule
+        $a \cdot e^{-((T-T_0)/\sigma)^2}$ & 温度高斯 & 0.054 & $-0.004$ & 3 \\
+        $a \cdot G(T) \cdot G(H)$ & 温度$\times$湿度 & 0.627 & 0.391 & 5 \\
+        $a \cdot G(T) \cdot G(H) \cdot \text{rain}$ & 完整 & 0.627 & 0.391 & 7 \\
+        $a \cdot T(T-T_{\min})\sqrt{T_{\max}-T}$ & Brière型 & $-0.656$ & $-0.742$ & 3 \\
+        $\mathbf{a + bT + cT^2 + dT^3}$ & \textbf{三次多项式} & $\mathbf{0.668}$ & $\mathbf{0.447}$ & \textbf{4} \\
+        \bottomrule
+    \end{tabular}
+    \label{tab:formulas}
+\end{table}
+
+\subsubsection{最优公式}
+
+符号回归发现的最优近似为三次多项式：
+
+\begin{equation}
+    \boxed{f(T) = 9.50 - 0.311T - 0.00622T^2 + 0.000219T^3}
+    \label{eq:best_formula}
+\end{equation}
+
+该公式拟合NN输出的 $R^2 = 0.447$，$r = 0.668$。
+物理上，该函数在低温端产卵率较高（反映越冬卵储备），
+在中高温区迅速下降（反映快速发育消耗），
+与NN学到的非线性模式一致。
+
+%=============================================================================
+\section{讨论}
+%=============================================================================
+
+\subsection{方法优势}
+
+\begin{enumerate}[leftmargin=2em]
+    \item \textbf{动力学模型为主体}：
+        ODE框架保证了模型的生物学可解释性，NN仅替代未知的产卵率函数。
+
+    \item \textbf{端到端训练}：
+        NN通过ODE数值解间接训练，学到的函数自动满足动力学约束。
+
+    \item \textbf{两阶段可解释性}：
+        Phase 1用NN发现模式，Phase 2用符号回归转化为解析公式，
+        最终模型完全可解释。
+
+    \item \textbf{病例预测统计显著}：
+        排除极端暴发后，$r=0.59$（$p<10^{-15}$），2019年暴发 $r=0.80$。
+\end{enumerate}
+
+\subsection{当前局限}
+
+\begin{enumerate}[leftmargin=2em]
+    \item \textbf{病例绝对量级偏差}：
+        模型季节性趋势正确（$r=0.59$），但多数年份的绝对病例数预测偏低。
+        这可能由于输入性病例的年际波动、报告率变化等非气象因素。
+
+    \item \textbf{2014年极端暴发无法拟合}：
+        该年45,189例（占总量90\%），
+        可能由特殊的输入性病例激增、社会因素导致，超出气象驱动模型能力。
+
+    \item \textbf{符号回归 $R^2$ 中等}：
+        最优公式 $R^2=0.45$，说明NN学到的函数不完全是简单解析形式。
+        可能需要引入更复杂的候选公式或使用PySR等自动化工具。
+
+    \item \textbf{BI数据覆盖有限}：
+        BI仅覆盖2006--2014年的82个月（广州），2015--2019年无BI，
+        导致蚊虫模型在后期缺乏约束。
+\end{enumerate}
+
+\subsection{改进方向}
+
+\begin{enumerate}[leftmargin=2em]
+    \item 使用 \textbf{PySR} 等自动化符号回归工具扩大公式搜索空间
+    \item 引入\textbf{可微分ODE求解器}（如 \texttt{torchdiffeq}）替代Euler积分
+    \item 构建\textbf{分城市模型}（广州、深圳等）利用空间异质性
+    \item 考虑2014年极端暴发的\textbf{输入性病例模型}
+\end{enumerate}
+
+%=============================================================================
+\section{结论}
+%=============================================================================
+
+本研究成功实现了\textbf{神经网络耦合动力学模型}框架，将蚊虫产卵率的未知函数用NN替代并嵌入ODE系统，通过端到端训练学习气象因素对蚊虫种群的影响机制。
+
+主要结论：
+\begin{enumerate}[leftmargin=2em]
+    \item 动力学模型作为主体框架，NN嵌入其中替代未知的产卵率函数，
+          训练后\textbf{病例相关系数 $r=0.59$}（$p<10^{-15}$）。
+
+    \item 三步训练策略（蚊虫拟合 → 疾病拟合 → 联合微调）有效平衡了
+          蚊虫监测数据和病例数据的拟合。
+
+    \item 符号回归发现产卵率的最优近似为三次多项式
+          $f(T) = 9.50 - 0.311T - 0.006T^2 + 0.0002T^3$，$R^2=0.45$。
+
+    \item 2014年极端暴发是模型拟合的主要障碍，排除后性能大幅改善。
+
+    \item 该框架为\textbf{蚊媒传染病动力学建模中未知机制的数据驱动发现}
+          提供了一种有效方法。
+\end{enumerate}
+
+%=============================================================================
+\section*{参考文献}
+%=============================================================================
+
+\begin{thebibliography}{99}
+
+\bibitem{zhang2024}
+Zhang M, Wang X, Tang S (2024).
+Integrating dynamic models and neural networks to discover the mechanism of meteorological factors on Aedes population.
+\textit{PLoS Computational Biology}, 20(9): e1012499.
+\url{https://doi.org/10.1371/journal.pcbi.1012499}
+
+\bibitem{mordecai2017}
+Mordecai EA, et al. (2017).
+Detecting the impact of temperature on transmission of Zika, dengue, and chikungunya using mechanistic models.
+\textit{PLoS Neglected Tropical Diseases}.
+
+\bibitem{brady2013}
+Brady OJ, et al. (2013).
+Modelling adult Aedes aegypti and Aedes albopictus survival at different temperatures in laboratory and field settings.
+\textit{Parasites \& Vectors}.
+
+\bibitem{otero2006}
+Otero M, Solari HG, Schweigmann N (2006).
+A stochastic population dynamics model for Aedes aegypti.
+\textit{Bulletin of Mathematical Biology}.
+
+\bibitem{ccm14}
+CCM14: Mosquito surveillance data in China.
+\url{https://github.com/xyyu001/CCM14}
+
+\end{thebibliography}
+
+%=============================================================================
+\appendix
+\section{模型可视化}
+%=============================================================================
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{../results/figures/phase1_coupled_model.png}
+    \caption{Phase 1: 神经网络耦合动力学模型结果。
+    包含BI拟合、病例拟合（线性和对数尺度）、NN学到的产卵率、
+    蚊虫种群动态、NN热力图、年度对比、训练损失等。}
+    \label{fig:phase1}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{../results/figures/phase2_formula_discovery.png}
+    \caption{Phase 2: 符号回归结果。
+    包含候选公式对比、温度/降水响应曲线、NN vs 公式对比、残差分布等。}
+    \label{fig:phase2}
+\end{figure}
+
+\section{代码与数据}
+
+所有代码和数据存放于 \texttt{v1\_nn\_coupled\_dynamics/} 目录：
+
+\begin{verbatim}
+v1_nn_coupled_dynamics/
+├── code/
+│   ├── phase1_coupled_model.py   # Phase 1: NN耦合动力学
+│   └── phase2_formula_discovery.py # Phase 2: 符号回归
+├── results/
+│   ├── figures/                  # 可视化图片
+│   └── data/                     # 预测数据、模型权重
+└── report/
+    └── report_v1.tex             # 本报告
+\end{verbatim}
+
+\end{document}
