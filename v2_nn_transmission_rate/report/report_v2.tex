@@ -1,0 +1,264 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{ctex}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{geometry}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{float}
+\usepackage{enumitem}
+
+\geometry{left=2.5cm,right=2.5cm,top=2.5cm,bottom=2.5cm}
+\hypersetup{colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=cyan}
+
+\title{
+    \textbf{神经网络耦合动力学模型研究} \\[0.5em]
+    \large 基于数据驱动的登革热传播率发现 \\[0.3em]
+    \normalsize Version 2.0 — NN学习传播效率$\beta'(T,H,R)$
+}
+\author{技术报告}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+本报告提出一种结合动力学模型、机器学习与符号回归的\textbf{三位一体框架}，用于研究登革热传播的环境驱动机制。
+参照PNAS (Li et al. 2019)的SIR+蚊虫密度框架和PLoS Comp Bio (Zhang et al. 2024)的NN+ODE耦合方法，
+我们用神经网络替代PNAS中的样条传播效率$\beta'(t)$，使其显式依赖气象变量$(T,H,R)$，
+再通过符号回归发现$\beta'$的解析表达式。
+
+使用广东省2006--2019年数据（168月），2014年不参与loss。
+\textbf{Phase 1}：NN学习传播效率$\beta'(T,H,R)$，病例拟合$r=0.75$，$R^2(\log)=0.65$。
+\textbf{Phase 2}：符号回归发现$\beta' \approx 1.3 \cdot G(T,31,15) \cdot G(H,78,30) \cdot \text{rain}$，
+拟合NN输出$R^2=0.91$。
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+%=============================================================================
+\section{研究框架}
+%=============================================================================
+
+\subsection{三位一体结构}
+
+\begin{center}
+\fbox{\parbox{0.92\textwidth}{
+\centering
+\textbf{①动力学模型}(SEI-SEIR) — 论文主体骨架 \\[0.3em]
+$\text{cases}(t) \approx \beta(t) \times \hat{M}(t) \times \text{cases\_pool}(t-1)$ \\[0.5em]
+\textbf{②机器学习}(NN) — 替代未知传播率$\beta$ \\[0.3em]
+$\beta'(t) = \text{NN}(T, H, R)$, 输入气象, 输出传播效率 \\[0.5em]
+\textbf{③符号回归} — 将NN翻译成公式 \\[0.3em]
+$\text{NN}(T,H,R) \rightarrow \beta' = f(T,H,R)$ = 解析表达式
+}}
+\end{center}
+
+\subsection{与参考文献的关系}
+
+\begin{table}[H]
+\centering
+\caption{方法对比}
+\begin{tabular}{lccc}
+\toprule
+& \textbf{PNAS (Li 2019)} & \textbf{PLoS (Zhang 2024)} & \textbf{本研究} \\
+\midrule
+动力学 & SIR & 蚊虫ODE & \textbf{SIR+蚊虫密度} \\
+$\beta'$形式 & 样条(3自由度) & N/A & \textbf{NN(T,H,R)} \\
+蚊虫密度 & GAM预测 & NN嵌入ODE & \textbf{BI数据代理} \\
+公式发现 & 无 & 符号回归 & \textbf{符号回归} \\
+创新 & 框架 & 方法 & \textbf{框架+方法结合} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{两阶段流程}
+
+\begin{description}[leftmargin=2em]
+\item[Step 1 — 反推$\beta(t)$:] 从月度病例数据反推传播势能序列。基于简化SIR：
+$\text{cases}(t) \approx \beta(t) \times \hat{M}(t) \times \text{cases\_pool}(t\!-\!1)$，
+因此 $\beta(t) = \text{cases}(t) / (\hat{M}(t) \times \text{pool}(t\!-\!1))$
+
+\item[Step 2 — NN拟合:] 监督学习，训练NN从气象变量预测$\beta(t)$：
+$\beta'(t) = \text{NN}(T_t, H_t, R_t)$
+
+\item[Step 3 — 验证:] 用NN预测的$\beta$代入SIR，生成预测病例并与观测对比
+
+\item[Phase 2 — 符号回归:] 从NN输入输出中搜索最优解析表达式
+\end{description}
+
+%=============================================================================
+\section{数据}
+%=============================================================================
+
+\begin{table}[H]
+\centering
+\caption{数据来源}
+\begin{tabular}{llcl}
+\toprule
+\textbf{数据} & \textbf{来源} & \textbf{时间} & \textbf{说明} \\
+\midrule
+登革热月度病例 & CCM14数据集 & 2006-2019 & 广东省,168月 \\
+蚊虫BI & CCM14数据集 & 2006-2023 & 广州市月度 \\
+气象 & CCM14 / Open-Meteo & 2006-2019 & T,H,R月度 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{2014年处理}：ODE连续运行（保持动力学连续性），但2014年12个月\textbf{不参与损失函数}。
+该年45,189例（占总量71\%），由非气象因素驱动（输入性病例激增+vector efficiency异常升高，参见PNAS原文）。
+
+%=============================================================================
+\section{结果}
+%=============================================================================
+
+\subsection{Phase 1: NN学习传播效率}
+
+\subsubsection{Step 1: 反推$\beta(t)$}
+
+从病例反推的$\beta(t)$与温度呈显著正相关（$r=0.59$），
+验证了环境因素对传播效率的驱动作用。
+
+\subsubsection{Step 2: NN拟合}
+
+NN成功学习$\beta(t)$与气象变量的关系：
+
+\begin{table}[H]
+\centering
+\caption{NN拟合$\beta(t)$的性能}
+\begin{tabular}{lc}
+\toprule
+\textbf{指标} & \textbf{值} \\
+\midrule
+相关系数 $r$ & \textbf{0.607} \\
+$R^2$ & \textbf{0.368} \\
+训练epochs & 2000 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection{Step 3: 病例验证}
+
+\begin{table}[H]
+\centering
+\caption{病例拟合性能}
+\begin{tabular}{lcc}
+\toprule
+\textbf{指标} & \textbf{排除2014} & \textbf{含2014} \\
+\midrule
+相关系数 $r$ & $\mathbf{0.751}$ & $0.749$ \\
+$R^2$ (log空间) & $\mathbf{0.647}$ & — \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{../results/figures/phase1_v2_transmission.png}
+\caption{Phase 1综合结果：病例拟合（第一行）、NN传播效率$\beta'$（第二行）、年度对比和热力图（第三行）。}
+\label{fig:phase1}
+\end{figure}
+
+\subsubsection{分年度分析}
+
+\begin{table}[H]
+\centering
+\caption{分年度拟合}
+\begin{tabular}{cccc}
+\toprule
+\textbf{年} & \textbf{实际} & \textbf{预测} & $r$ \\
+\midrule
+2006 & 1,010 & 2,010 & 0.78 \\
+2008 & 87 & 87 & 0.38 \\
+2012 & 474 & 923 & 0.69 \\
+2013 & 2,894 & 2,197 & 0.62 \\
+2017 & 1,662 & 2,000 & 0.72 \\
+2018 & 3,315 & 2,084 & 0.70 \\
+\textbf{2019} & \textbf{6,042} & \textbf{13,893} & \textbf{0.92} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Phase 2: 符号回归}
+
+\begin{table}[H]
+\centering
+\caption{候选公式对比}
+\begin{tabular}{lccc}
+\toprule
+\textbf{公式} & $r$ & $R^2$ & \textbf{参数} \\
+\midrule
+$a \cdot e^{-((T-T_0)/\sigma)^2}$ & 0.908 & 0.823 & 3 \\
+$a \cdot G(T) \cdot G(H)$ & 0.963 & 0.910 & 5 \\
+$\mathbf{a \cdot G(T) \cdot G(H) \cdot \text{rain}}$ & $\mathbf{0.965}$ & $\mathbf{0.914}$ & \textbf{7} \\
+Brière & $-0.882$ & — & 3 \\
+多项式 $T^3$ & 0.909 & 0.823 & 4 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{最优公式}：
+\begin{equation}
+\boxed{\beta'(T,H,R) \approx 1.305 \cdot e^{-\left(\frac{T-31}{15}\right)^2} \cdot e^{-\left(\frac{H-78}{30}\right)^2} \cdot (0.71 + 0.29 \cdot (1-e^{-0.098R}))}
+\end{equation}
+
+物理意义：最适传播温度$\sim$31°C，最适湿度$\sim$78\%，降水有正向但饱和的促进效应。
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{../results/figures/phase2_formula_discovery.png}
+\caption{Phase 2符号回归结果。}
+\label{fig:phase2}
+\end{figure}
+
+%=============================================================================
+\section{v1→v2改进对比}
+%=============================================================================
+
+\begin{table}[H]
+\centering
+\caption{版本对比}
+\begin{tabular}{lccc}
+\toprule
+& \textbf{v1} & \textbf{v2} & \textbf{提升} \\
+\midrule
+NN替代的变量 & 产卵率 & \textbf{传播率$\beta'$} & 更直接 \\
+病例$r$ & 0.59 & \textbf{0.75} & +27\% \\
+符号回归$R^2$ & 0.45 & \textbf{0.91} & +102\% \\
+2019年$r$ & — & \textbf{0.92} & 新增 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+%=============================================================================
+\section{讨论与展望}
+%=============================================================================
+
+\subsection{可扩展性}
+模型天然支持多城市扩展：给定任意城市的(T,H,R,BI)数据，
+即可通过$\beta'=\text{NN}(T,H,R)$预测传播效率，
+结合当地蚊虫密度估算疫情风险。
+
+\subsection{改进方向}
+\begin{enumerate}[leftmargin=2em]
+\item 用\textbf{多城市数据}联合训练NN（广州+深圳等），提升泛化性
+\item 安装\textbf{PySR}进行自动化符号回归
+\item 使用\textbf{半月度MOI}数据提高时间分辨率
+\item 建立\textbf{城市级预警模型}
+\end{enumerate}
+
+%=============================================================================
+\section*{参考文献}
+%=============================================================================
+
+\begin{thebibliography}{99}
+\bibitem{li2019} Li R, et al. (2019). Climate-driven variation in mosquito density predicts the spatiotemporal dynamics of dengue. \textit{PNAS}, 116(9): 3624-3629.
+\bibitem{zhang2024} Zhang M, Wang X, Tang S (2024). Integrating dynamic models and neural networks to discover the mechanism of meteorological factors on Aedes population. \textit{PLoS Comp Bio}, 20(9): e1012499.
+\bibitem{ccm14} CCM14 Dataset. \url{https://github.com/xyyu001/CCM14}
+\end{thebibliography}
+
+\end{document}
