@@ -1,0 +1,392 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[UTF8]{ctex}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{geometry}
+\usepackage{xcolor}
+\usepackage{tcolorbox}
+\usepackage{float}
+\usepackage{hyperref}
+\usepackage{longtable}
+
+\geometry{left=2.5cm,right=2.5cm,top=2.5cm,bottom=2.5cm}
+
+\title{\textbf{登革热蚊媒-人群动力学模型} \\ \large SEI-SEIR 模型技术文档}
+\author{蚊媒传染病建模项目}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\tableofcontents
+\newpage
+
+%===========================================
+\section{模型概述}
+%===========================================
+
+本模型采用 \textbf{SEI-SEIR} 结构，描述登革热在蚊媒和人群之间的传播动态：
+
+\begin{itemize}
+    \item \textbf{蚊媒水生期}: 幼虫 (L) $\to$ 蛹 (P)
+    \item \textbf{蚊媒成虫}: 易感 (S$_m$) $\to$ 暴露 (E$_m$) $\to$ 感染 (I$_m$)
+    \item \textbf{人群}: 易感 (S$_h$) $\to$ 暴露 (E$_h$) $\to$ 感染 (I$_h$) $\to$ 恢复 (R$_h$)
+\end{itemize}
+
+\begin{tcolorbox}[colback=blue!5!white,colframe=blue!75!black,title=模型特点]
+\begin{enumerate}
+    \item 完整的蚊虫生命周期 (幼虫→蛹→成蚊)
+    \item 温度依赖的生物学参数
+    \item 布雷图指数 (BI) 校正幼虫密度
+    \item 输入病例机制
+\end{enumerate}
+\end{tcolorbox}
+
+%===========================================
+\section{完整微分方程组}
+%===========================================
+
+\subsection{蚊虫水生阶段}
+
+\begin{tcolorbox}[colback=green!5!white,colframe=green!60!black,title=幼虫 (Larvae, L)]
+\begin{equation}
+\frac{dL}{dt} = \underbrace{\phi(T) \cdot \sigma_E \cdot M_{total} \cdot \text{BI}_{ratio}}_{\text{产卵输入}} - \underbrace{f_L(T) \cdot L}_{\text{发育为蛹}} - \underbrace{\mu_L(T) \cdot L \cdot \left(1 + \frac{L}{K_L}\right)}_{\text{密度依赖死亡}}
+\end{equation}
+\end{tcolorbox}
+
+其中：
+\begin{itemize}
+    \item $\phi(T)$: 温度依赖的产卵率
+    \item $\sigma_E = 0.6$: 卵存活率
+    \item $M_{total} = S_m + E_m + I_m$: 成蚊总数
+    \item $\text{BI}_{ratio} = \text{BI}(t) / \overline{\text{BI}}$: 归一化布雷图指数
+    \item $f_L(T)$: 幼虫发育率
+    \item $\mu_L(T)$: 幼虫死亡率
+    \item $K_L = K_{base} \times 10^7 \times \text{BI}_{ratio}$: 承载力
+\end{itemize}
+
+\begin{tcolorbox}[colback=green!5!white,colframe=green!60!black,title=蛹 (Pupae, P)]
+\begin{equation}
+\frac{dP}{dt} = \underbrace{f_L(T) \cdot L}_{\text{幼虫发育}} - \underbrace{f_P(T) \cdot P}_{\text{羽化为成蚊}} - \underbrace{0.05 \cdot P}_{\text{死亡}}
+\end{equation}
+\end{tcolorbox}
+
+\subsection{蚊虫成虫阶段 (SEI)}
+
+\begin{tcolorbox}[colback=orange!5!white,colframe=orange!80!black,title=易感成蚊 (Susceptible, S$_m$)]
+\begin{equation}
+\frac{dS_m}{dt} = \underbrace{\sigma_P \cdot f_P(T) \cdot P}_{\text{羽化}} - \underbrace{\lambda_m \cdot S_m}_{\text{被感染}} - \underbrace{\mu_m(T) \cdot S_m}_{\text{死亡}}
+\end{equation}
+\end{tcolorbox}
+
+\begin{tcolorbox}[colback=orange!5!white,colframe=orange!80!black,title=暴露成蚊 (Exposed, E$_m$)]
+\begin{equation}
+\frac{dE_m}{dt} = \underbrace{\lambda_m \cdot S_m}_{\text{新感染}} - \underbrace{\epsilon(T) \cdot E_m}_{\text{转为感染}} - \underbrace{\mu_m(T) \cdot E_m}_{\text{死亡}}
+\end{equation}
+\end{tcolorbox}
+
+\begin{tcolorbox}[colback=orange!5!white,colframe=orange!80!black,title=感染成蚊 (Infectious, I$_m$)]
+\begin{equation}
+\frac{dI_m}{dt} = \underbrace{\epsilon(T) \cdot E_m}_{\text{暴露期结束}} - \underbrace{\mu_m(T) \cdot I_m}_{\text{死亡}}
+\end{equation}
+\end{tcolorbox}
+
+蚊虫感染力:
+\begin{equation}
+\lambda_m = a(T) \cdot b_{hv}(T) \cdot \frac{I_h + \text{imp}}{N_H}
+\end{equation}
+
+\subsection{人群动态 (SEIR)}
+
+\begin{tcolorbox}[colback=red!5!white,colframe=red!75!black,title=易感人群 (Susceptible, S$_h$)]
+\begin{equation}
+\frac{dS_h}{dt} = -\lambda_h \cdot S_h
+\end{equation}
+\end{tcolorbox}
+
+\begin{tcolorbox}[colback=red!5!white,colframe=red!75!black,title=暴露人群 (Exposed, E$_h$)]
+\begin{equation}
+\frac{dE_h}{dt} = \underbrace{\lambda_h \cdot S_h}_{\text{新感染}} - \underbrace{\delta \cdot E_h}_{\text{转为发病}}
+\end{equation}
+\end{tcolorbox}
+
+\begin{tcolorbox}[colback=red!5!white,colframe=red!75!black,title=感染人群 (Infectious, I$_h$)]
+\begin{equation}
+\frac{dI_h}{dt} = \underbrace{\delta \cdot E_h}_{\text{发病}} - \underbrace{\gamma \cdot I_h}_{\text{恢复}}
+\end{equation}
+\end{tcolorbox}
+
+\begin{tcolorbox}[colback=red!5!white,colframe=red!75!black,title=恢复人群 (Recovered, R$_h$)]
+\begin{equation}
+\frac{dR_h}{dt} = \gamma \cdot I_h
+\end{equation}
+\end{tcolorbox}
+
+人群感染力:
+\begin{equation}
+\lambda_h = a(T) \cdot b_{vh}(T) \cdot \frac{I_m}{N_H}
+\end{equation}
+
+\subsection{每周新发病例}
+
+模型输出的周新发病例数:
+\begin{equation}
+\text{Cases}_{week} = \gamma \cdot I_h \times 7
+\end{equation}
+
+%===========================================
+\section{温度依赖参数}
+%===========================================
+
+所有生物学参数均为温度 $T$ (°C) 的函数：
+
+\subsection{产卵率}
+\begin{equation}
+\phi(T) = \max\left(0.1, \phi_{max} \cdot \exp\left(-\left(\frac{T-28}{7}\right)^2\right)\right)
+\end{equation}
+其中 $\phi_{max} = 4.0$，最适温度 28°C。
+
+\subsection{发育率}
+
+\textbf{幼虫发育率}:
+\begin{equation}
+f_L(T) = \max\left(0.01, 0.10 \cdot \exp\left(-\left(\frac{T-27}{9}\right)^2\right)\right)
+\end{equation}
+
+\textbf{蛹发育率}:
+\begin{equation}
+f_P(T) = \max\left(0.01, 0.15 \cdot \exp\left(-\left(\frac{T-27}{9}\right)^2\right)\right)
+\end{equation}
+
+\subsection{死亡率}
+
+\textbf{幼虫死亡率}:
+\begin{equation}
+\mu_L(T) = \begin{cases}
+0.30 & T < 15 \\
+0.25 & T > 35 \\
+\max(0.05, 0.15 - 0.006(T-15)) & \text{otherwise}
+\end{cases}
+\end{equation}
+
+\textbf{成蚊死亡率} (U形曲线):
+\begin{equation}
+\mu_m(T) = \mu_{min} + 0.002 \cdot (T - T_{opt})^2
+\end{equation}
+其中 $\mu_{min} = 0.04$，$T_{opt} = 26$°C。
+
+\subsection{叮咬与传播}
+
+\textbf{叮咬率}:
+\begin{equation}
+a(T) = \max\left(0.1, 0.5 \cdot \exp\left(-\left(\frac{T-28}{8}\right)^2\right)\right)
+\end{equation}
+
+\textbf{人$\to$蚊传播概率}:
+\begin{equation}
+b_{hv}(T) = 0.4 \cdot \exp\left(-\left(\frac{T-27}{6}\right)^2\right)
+\end{equation}
+
+\textbf{蚊$\to$人传播概率}:
+\begin{equation}
+b_{vh}(T) = 0.45 \cdot \exp\left(-\left(\frac{T-26}{6}\right)^2\right)
+\end{equation}
+
+\subsection{外潜伏期 (EIP)}
+
+蚊虫外潜伏期转化率:
+\begin{equation}
+\epsilon(T) = \begin{cases}
+0.05 & T < 18 \\
+0.20 & T > 32 \\
+0.08 + 0.01(T-20) & \text{otherwise}
+\end{cases}
+\end{equation}
+
+%===========================================
+\section{固定参数}
+%===========================================
+
+\begin{table}[H]
+\centering
+\caption{固定生物学参数}
+\begin{tabular}{lccc}
+\toprule
+\textbf{参数} & \textbf{符号} & \textbf{值} & \textbf{说明} \\
+\midrule
+卵存活率 & $\sigma_E$ & 0.6 & 卵→幼虫存活 \\
+蛹存活率 & $\sigma_P$ & 0.7 & 蛹→成蚊存活 \\
+人潜伏期转化率 & $\delta$ & 1/5 天$^{-1}$ & 内潜伏期约5天 \\
+人恢复率 & $\gamma$ & 1/7 天$^{-1}$ & 感染期约7天 \\
+人口总数 & $N_H$ & 14,000,000 & 广州市人口 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+%===========================================
+\section{估计参数（通过优化）}
+%===========================================
+
+以下参数通过差分进化算法 + Nelder-Mead局部优化估计：
+
+\begin{table}[H]
+\centering
+\caption{优化估计的参数}
+\begin{tabular}{lccl}
+\toprule
+\textbf{参数} & \textbf{符号} & \textbf{优化范围} & \textbf{含义} \\
+\midrule
+繁殖缩放因子 & $k_{scale}$ & [0.1, 20] & 调整产卵率和承载力 \\
+传播缩放因子 & $b_{scale}$ & [0.01, 5] & 调整传播效率 \\
+输入病例率 & imp & [0, 50] & 每周外部输入病例数 \\
+基础承载力因子 & $K_{base}$ & [0.1, 10] & 幼虫承载力基数 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{注}: 这些参数目前被估计为\textbf{常数}。如需进行符号回归，需将 $b_{scale}$ 改为时变参数 $\beta(t)$。
+
+%===========================================
+\section{BI 校正机制}
+%===========================================
+
+布雷图指数 (BI) 是蚊媒幼虫密度的\textbf{相对指标}，模型中通过以下方式校正：
+
+\subsection{BI归一化}
+\begin{equation}
+\text{BI}_{ratio}(t) = \frac{\text{BI}(t)}{\overline{\text{BI}}}
+\end{equation}
+
+\subsection{校正方式}
+
+\begin{enumerate}
+    \item \textbf{产卵输入}: 
+    \begin{equation}
+    \text{产卵} = \phi(T) \cdot \sigma_E \cdot M_{total} \cdot \textcolor{red}{\text{BI}_{ratio}}
+    \end{equation}
+    BI高 → 环境适宜 → 产卵增加
+    
+    \item \textbf{环境承载力}: 
+    \begin{equation}
+    K_L = K_{base} \times 10^7 \times \textcolor{red}{\text{BI}_{ratio}}
+    \end{equation}
+    BI高 → 栖息地多 → 承载力大
+\end{enumerate}
+
+\subsection{验证指标}
+通过计算模型幼虫 $L(t)$ 与观测 BI 的相关系数来验证校正效果：
+\begin{equation}
+r_{BI-L} = \text{Corr}\left(\text{BI}_{normalized}, \frac{L(t)}{\overline{L}}\right)
+\end{equation}
+
+%===========================================
+\section{基本再生数 R$_0$}
+%===========================================
+
+根据 Ross-MacDonald 模型推导：
+
+\begin{equation}
+R_0 = \sqrt{\frac{a^2 \cdot b_{vh} \cdot b_{hv} \cdot M \cdot \epsilon}{\mu_m \cdot (\epsilon + \mu_m) \cdot \gamma \cdot N_H}}
+\end{equation}
+
+其中：
+\begin{itemize}
+    \item $a$: 叮咬率
+    \item $b_{vh}, b_{hv}$: 传播概率
+    \item $M$: 成蚊总数
+    \item $\epsilon$: EIP转化率
+    \item $\mu_m$: 成蚊死亡率
+    \item $\gamma$: 人恢复率
+    \item $N_H$: 人口总数
+\end{itemize}
+
+\textbf{解释}: $R_0 > 1$ 表示疫情可能扩散，$R_0 < 1$ 表示疫情将消退。
+
+%===========================================
+\section{时间尺度说明}
+%===========================================
+
+\begin{tcolorbox}[colback=yellow!5!white,colframe=yellow!50!black,title=重要说明]
+\begin{itemize}
+    \item \textbf{ODE积分步长}: 1天 ($dt = 1$)
+    \item \textbf{数据尺度}: 周 (月度数据插值为周)
+    \item \textbf{参数单位}: 天$^{-1}$
+    \item \textbf{周数据索引}: $\text{idx} = \lfloor t/7 \rfloor$
+\end{itemize}
+周新发病例 = 日发病率 × 7
+\end{tcolorbox}
+
+%===========================================
+\section{模型结构图}
+%===========================================
+
+\begin{figure}[H]
+\centering
+\begin{verbatim}
+                    温度 T(t)
+                       |
+                       v
+    +------------------+------------------+
+    |                  |                  |
+    v                  v                  v
+  phi(T)            mu_m(T)           b(T)
+    |                  |                  |
+    v                  v                  v
++-------+  f_L   +-------+  f_P   +----------------+
+|   L   | -----> |   P   | -----> |  S_m → E_m → I_m  |
+| 幼虫   |        |  蛹   |        |     成蚊 SEI      |
++-------+        +-------+        +----------------+
+    ^                                      |
+    |                                      | b_vh
+    |  BI校正                              v
+    |                              +----------------+
++-------+                          | S_h → E_h → I_h → R_h |
+|  BI   |                          |     人群 SEIR        |
++-------+                          +----------------+
+                                           ^
+                                           |
+                                   imp (输入病例)
+\end{verbatim}
+\caption{SEI-SEIR 模型结构}
+\end{figure}
+
+%===========================================
+\section{模型性能（2015-2019广东数据）}
+%===========================================
+
+\begin{table}[H]
+\centering
+\caption{模型评估指标}
+\begin{tabular}{lc}
+\toprule
+\textbf{指标} & \textbf{值} \\
+\midrule
+Pearson 相关系数 $r$ & 0.70 - 0.76 \\
+$R^2$ (对数尺度) & 0.50 - 0.55 \\
+BI-幼虫相关 & 0.60 - 0.75 \\
+$R_0$ 范围 & 0.5 - 2.5 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+%===========================================
+\section{符号回归扩展（待实现）}
+%===========================================
+
+当前模型的 $b_{scale}$ 为常数。如需进行符号回归，需：
+
+\begin{enumerate}
+    \item 将 $b_{scale}$ 改为时变参数 $\beta(t)$
+    \item 对每周独立估计 $\beta(t)$ 序列
+    \item 使用符号回归寻找 $\beta(t) = f(T, \text{humidity}, \text{BI})$
+\end{enumerate}
+
+理论公式（基于MLP预测结果）：
+\begin{equation}
+P(T) \approx A \cdot \exp\left(-\left(\frac{T - T_{opt}}{\sigma}\right)^2\right)
+\end{equation}
+其中 $A \approx 0.35$，$T_{opt} \approx 26.5$°C，$\sigma \approx 5.8$。
+
+\end{document}
