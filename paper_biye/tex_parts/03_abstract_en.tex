@@ -1,0 +1,19 @@
+
+\newpage
+\begin{center}
+{\sffamily\zihao{3} Abstract}
+\end{center}
+\addcontentsline{toc}{section}{Abstract}
+
+Dengue fever is one of the most severe mosquito-borne infectious diseases globally. Southern China, especially Guangdong Province, is the primary endemic region in the country. Understanding how climatic factors drive dengue transmission efficiency is crucial for establishing early-warning systems and formulating targeted control strategies. However, traditional mechanistic models rely on \textit{a priori} assumptions to fix the functional form of the transmission rate, making it difficult to discover optimal climate--transmission relationships from data automatically. Meanwhile, purely data-driven machine learning approaches suffer from limited interpretability.
+
+This thesis proposes a three-stage hybrid modeling framework---``Neural-Network-Coupled SEIR Dynamics + Symbolic Regression''---that aims to balance mechanistic interpretability with data adaptability. The framework consists of three core stages: (1)~inverting monthly transmission coefficients $\beta'$ from observed case data via an SEIR compartmental model; (2)~training a multilayer perceptron (MLP) to learn the nonlinear mapping from climate variables (temperature~$T$, precipitation~$R$, relative humidity~$H$) to $\beta'$, enabling month-by-month case prediction; (3)~performing knowledge distillation of the neural network via symbolic regression to discover interpretable closed-form formulas.
+
+The study is organized into two parts. Part~I uses Guangzhou as a single-city case study (2005--2019 biweekly data). In Phase~1, the coupled model achieves a Pearson correlation of $r=0.612$, Spearman rank correlation of $\rho=0.705$, log-scale $R^2=0.450$, and MAE${}=51.23$ for Guangzhou monthly cases. In Phase~2, symbolic regression discovers the optimal formula from two candidate families---physical-template and polynomial. The quadratic polynomial with interaction terms fits the neural network output with $R^2=0.999987$, revealing physical patterns such as positive temperature--precipitation interaction ($a_{TR}>0$) and a negative quadratic rainfall effect ($a_{RR}<0$). Analysis of the extreme 2014 outbreak demonstrates that the formula can distinguish anomalous climate signals in extreme years.
+
+Part~II transfers the formula discovered in Guangzhou to 16 prefecture-level cities in Guangdong Province (2005--2019), employing three city-level scaling schemes for annual and monthly validation. Results show that the Spearman correlation of 2014 annual total cases across 16~cities is $\rho=0.900$ ($p=2.05\times10^{-6}$), with non-Guangzhou 15-city MAE${}=61.8$ and RMSE${}=116.8$, confirming the spatial generalizability of the formula. Compared with the old dataset (13~cities, 2003--2017), the new dataset improves the ranking correlation from $\rho=0.713$ to $\rho=0.879$. City-level monthly curves yield a median Pearson~$r=0.481$ and median Spearman~$\rho=0.469$, indicating that the formula captures the seasonal trend for most cities.
+
+Key innovations include: (1)~a ``neural-network inverse problem + symbolic distillation'' paradigm that overcomes the reliance on \textit{a priori} functional forms in traditional SEIR models; (2)~a discovered closed-form formula with clear physical meaning that can be directly transferred to other cities; (3)~systematic validation of single-city mechanisms at the multi-city spatial scale; (4)~an improved balance between interpretability and generalizability compared with the spline approach of Li~et~al.\ (2019, PNAS) and the pure symbolic regression approach of Zhang~et~al.\ (2024).
+
+\vspace{1em}
+\noindent \textbf{Keywords:} Dengue fever; SEIR model; Neural network; Symbolic regression; Transmission efficiency; Guangdong Province; Multi-city validation

@@ -1,0 +1,227 @@
+%% ==================================================================
+\section{第一部分：单城市机制发现（广州）}
+\label{sec:part1}
+%% ==================================================================
+
+\subsection{引言}
+\label{sec:p1-intro}
+
+登革热传播效率的量化是建立预警模型的基础环节。传统方法要么依赖先验假设固定传播率函数形式（如假设$\beta$为温度的高斯函数），要么完全放弃机制可解释性而依靠黑箱预测。本章提出的三阶段框架试图在两者之间找到平衡：首先利用SEIR动力学反演传播系数，然后用神经网络自由学习气候映射，最后用符号回归将其"翻译"为人类可读的数学公式。
+
+广州作为中国大陆登革热负担最重的城市，拥有相对完整的病例报告系统和气候监测网络，是检验新方法的理想试验田。2005--2019年的15年跨度涵盖了多个暴发年份（尤其是2014年特大暴发），为模型提供了充分的信号变异性。选择双周（biweekly）为时间分辨率，既保留了足够的动态细节，又避免了日数据中过多的随机噪声。
+
+\subsection{数据材料与方法}
+\label{sec:p1-method}
+
+\subsubsection{研究区域与数据来源}
+\label{sec:p1-data}
+
+本研究的核心研究区域为广州市（23.13$^\circ$N, 113.26$^\circ$E），位于珠江三角洲北缘，属南亚热带季风气候，年均气温21.4--22.4$^\circ$C，年均降水量1600--1900~mm，全年相对湿度较高（年均约77\%），为白纹伊蚊的繁殖和登革病毒传播提供了适宜的气候条件。
+
+\textbf{病例数据}：登革热月度报告病例数来源于中国疾病预防控制中心传染病报告信息系统及广东省卫生健康委员会公开统计报告，时间范围为2005年1月至2019年12月。病例定义依据《登革热诊断标准》（WS~216），包括实验室确诊和临床诊断病例。数据按双周聚合为双周病例序列，共计$15\times24=360$个双周时间点（其中广州有效记录180个月度观测点）。
+
+\textbf{气象数据}：逐日气温（平均温度$T$，$^\circ$C）、降水量（$R$，mm）和相对湿度（$H$，\%）来源于美国国家海洋和大气管理局（NOAA）全球地面天气观测数据集（Global Surface Summary of the Day, GSOD），选取广州白云国际机场气象站（站号59287）的逐日记录，并聚合为月度平均值。
+
+\textbf{蚊媒密度数据}：布雷图指数（Breteau Index, BI）数据来源于广州市疾病预防控制中心的蚊媒监测系统。BI定义为每百户阳性容器数，是衡量伊蚊幼虫密度的标准指标。月度BI值用于在SEIR模型中构造标准化蚊虫密度指标$\hat{M}$。
+
+\textbf{人口数据}：广州市常住人口$N_h = 1.426\times10^7$，取自2012年（研究时段中点）统计年鉴数据\cite{ccm14}。选择固定的中点人口而非逐年变化的人口序列，主要基于以下考虑：(1)~SEIR模型中$N_h$主要用于计算感染力$\lambda$的归一化分母，在疫情规模远小于总人口（$I \ll N_h$）的条件下，$N_h$的年际变化（约1--2\%/年）对模型输出的影响可忽略不计；(2)~使用固定人口可避免引入额外的人口动态假设，降低模型复杂度。
+
+\subsubsection{数据预处理}
+\label{sec:p1-preprocess}
+
+为消除不同气候变量量纲差异对神经网络训练的影响，对温度、降水和相对湿度进行Min-Max标准化：
+\begin{equation}
+\label{eq:minmax}
+x_{\text{norm}} = \frac{x - x_{\min}}{x_{\max} - x_{\min}}
+\end{equation}
+其中$x_{\min}$和$x_{\max}$分别为该变量在训练集中的最小值和最大值。标准化后所有气候变量值域为$[0,1]$。
+
+对于布雷图指数$\mathrm{BI}$，采用相对于最大值的归一化处理构造标准化蚊虫密度：
+\begin{equation}
+\label{eq:bi-norm}
+\hat{M}(t) = \frac{\mathrm{BI}(t)}{\max_t \mathrm{BI}(t)}
+\end{equation}
+使得$\hat{M}(t) \in [0,1]$代表相对蚊虫密度。
+
+\subsubsection{SEIR动力学模型}
+\label{sec:p1-seir}
+
+本文采用经典的SEIR（易感--暴露--感染--恢复）仓室模型描述登革热在人群中的传播动态。模型将人群分为四个互斥的状态仓室：易感者$S$、暴露者（潜伏期）$E$、感染者$I$和恢复者$R$，总人口$N_h = S + E + I + R$保持不变。控制方程为：
+\begin{equation}
+\label{eq:seir}
+\begin{aligned}
+\frac{dS}{dt} &= -\lambda(t) \cdot S \\[4pt]
+\frac{dE}{dt} &= \lambda(t) \cdot S + \eta - \sigma_h \cdot E \\[4pt]
+\frac{dI}{dt} &= \sigma_h \cdot E - \gamma \cdot I \\[4pt]
+\frac{dR}{dt} &= \gamma \cdot I
+\end{aligned}
+\end{equation}
+其中，$\lambda(t)$为时变感染力（force of infection），定义为：
+\begin{equation}
+\label{eq:foi}
+\lambda(t) = \beta'(t) \cdot \frac{\hat{M}(t)}{N_h} \cdot I(t)
+\end{equation}
+
+各参数含义如下：
+\begin{itemize}[leftmargin=2em]
+\item $\beta'(t)$：有效传播系数，综合反映蚊虫叮咬率、人--蚊--人传播概率等因素的时变参数，是本文核心待估量。其单位为day$^{-1}$。
+\item $\hat{M}(t)$：标准化蚊虫密度（无量纲），由布雷图指数归一化得到。
+\item $\sigma_h = 1/5.9 \approx 0.169$~day$^{-1}$：人体潜伏期转化率，登革热人体内潜伏期均值约为5.9天\cite{chan2012}。
+\item $\gamma = 1/14 \approx 0.071$~day$^{-1}$：恢复率，登革热感染期约为14天\cite{mordecai2017}。
+\item $\eta$：输入项，表示外源性暴露输入，为可训练参数。
+\end{itemize}
+
+模型方程的时间单位为天（day），在数值积分时采用逐日步进、双周/月度聚合的策略：在每个双周时段内以日为步长对方程组进行数值积分（使用四阶Runge-Kutta方法），然后将每双周的新增感染者$\sum \sigma_h \cdot E \cdot \Delta t$作为该双周的模型预测病例数。
+
+基本再生数$R_0$可以表示为：
+\begin{equation}
+\label{eq:r0}
+R_0 = \frac{\beta' \cdot \hat{M}}{\gamma}
+\end{equation}
+
+\subsubsection{神经网络架构}
+\label{sec:p1-nn}
+
+为学习气候变量到传播系数$\beta'$的非线性映射关系，本文采用一个轻量级的多层感知机（MLP）。网络架构为：输入层3个神经元（$T_{\text{norm}}$、$R_{\text{norm}}$、$H_{\text{norm}}$），隐藏层1为16个神经元（Softplus激活），隐藏层2为16个神经元（Softplus激活），输出层1个神经元（Sigmoid激活）。模型总参数量为$3\times16+16+16\times16+16+16\times1+1 = 353$个。选择小规模网络的考虑：(1)~训练样本有限（168个观测点），避免过拟合；(2)~后续符号回归需要逼近网络输出；(3)~两层隐藏层已能表达温度单峰响应和多变量交互效应。
+
+\subsubsection{训练策略}
+\label{sec:p1-training}
+
+训练分为两个步骤：
+
+\textbf{Step~1：反演$\beta'$时间序列}。通过数值求解在每个月独立求解$\beta'(t)$使得SEIR模型预测病例数与观测匹配。
+
+\textbf{Step~2：训练神经网络}。损失函数为：
+\begin{equation}
+\label{eq:loss}
+\mathcal{L} = \text{MSE}(\hat{C}, C_{\text{obs}}) - 0.5 \cdot \text{Corr}(\hat{C}, C_{\text{obs}})
+\end{equation}
+采用Adam优化器\cite{kingma2015}，学习率$10^{-3}$，余弦退火策略。2014年数据完全排除（leave-one-out验证）。
+
+\subsubsection{符号回归与知识蒸馏}
+\label{sec:p1-sr}
+
+以训练好的神经网络在$20\times20\times20=8000$点三维网格上的预测值为"教师信号"，在两个候选族中搜索：
+
+\textbf{物理模板族}：温度高斯函数$f_T = \exp(-(T-T_{\text{opt}})^2/2\sigma_T^2)$（$T_{\text{opt}}$初始27$^\circ$C\cite{mordecai2019}），降水饱和函数$f_R=1-\exp(-k_R R)$，乘法耦合。
+
+\textbf{多项式族}：
+\begin{equation}
+\label{eq:poly}
+\beta' = \max\!\bigl(0,\; a_0 + a_T T + a_H H + a_R R + a_{TT} T^2 + a_{HH} H^2 + a_{RR} R^2 + a_{TH} TH + a_{TR} TR + a_{HR} HR\bigr)
+\end{equation}
+
+使用PySR库\cite{cranmer2023}，运算符$\{+,-,\times,\div,\exp,\log,\text{pow}\}$，在帕累托前沿选择最优表达式。
+
+\subsubsection{评估指标}
+\label{sec:p1-metrics}
+
+采用多维度指标：Spearman~$\rho$、Kendall~$\tau$、Pearson~$r$、$R^2_{\log}$、MAE、RMSE、WAPE、RMSLE。城市排名验证以Spearman~$\rho$为首要指标。
+
+\subsection{结果}
+\label{sec:p1-results}
+
+\subsubsection{描述性分析}
+\label{sec:p1-descriptive}
+
+2005--2019年广州市登革热月度病例呈显著季节性：6--7月上升，9--10月达峰，11月后下降。2014年报告37,382例（约其他年份十余倍），2006年和2013年约1,200例为次级暴发年。反演的$\beta'$与温度$T$相关$r\approx0.51$，与降水$R$相关$r\approx0.35$，与湿度$H$相关$r\approx0.28$。
+
+\subsubsection{Phase 1：耦合模型预测结果}
+\label{sec:p1-phase1}
+
+\begin{table}[H]
+\centering
+\caption{Phase~1：广州耦合模型预测指标（排除2014年，$n=168$）}
+\label{tab:phase1-metrics}
+\begin{tabular}{lc}
+\toprule
+指标 & 值 \\
+\midrule
+Pearson $r$ & 0.612 \\
+Spearman $\rho$ & 0.705 \\
+$R^2_{\log}$ & 0.450 \\
+MAE & 51.23 \\
+RMSE & 139.10 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+$\rho=0.705$表明模型较好捕捉排名趋势。$r=0.612$反映绝对量级误差主要来自暴发峰值。$R^2_{\log}=0.450$对零膨胀右偏时间序列合理。
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.9\textwidth]{../results/data2_1plus3/phase1_guangzhou_data2.png}
+\caption{Phase~1：广州耦合模型月度病例预测与观测对比（2005--2019年，排除2014年）}
+\label{fig:phase1}
+\end{figure}
+
+\subsubsection{Phase 2：符号回归公式发现}
+\label{sec:p1-phase2}
+
+\begin{table}[H]
+\centering
+\caption{Phase~2：两类候选公式拟合精度比较}
+\label{tab:phase2-compare}
+\begin{tabular}{lcccc}
+\toprule
+公式族 & $R^2$ & Corr & RMSE & MAE \\
+\midrule
+物理模板族 & 0.9973 & 0.9987 & $2.91\times10^{-4}$ & $2.15\times10^{-4}$ \\
+多项式族 & 0.999987 & 0.999994 & $6.27\times10^{-6}$ & $4.54\times10^{-6}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+多项式族$R^2=0.999987$显著优于物理模板族，表明气候--$\beta'$映射更接近光滑二次曲面。
+
+\begin{table}[H]
+\centering
+\caption{Phase~2：最优二次多项式公式系数}
+\label{tab:coefficients}
+\begin{tabular}{lrl}
+\toprule
+系数 & 估计值 & 物理含义 \\
+\midrule
+$a_0$ & $1.801\times10^{-1}$ & 基线传播系数 \\
+$a_T$ & $5.065\times10^{-5}$ & 温度线性正效应 \\
+$a_H$ & $4.443\times10^{-5}$ & 湿度线性正效应 \\
+$a_R$ & $-3.327\times10^{-5}$ & 降水线性负效应 \\
+$a_{TT}$ & $2.695\times10^{-6}$ & 温度二次正效应 \\
+$a_{HH}$ & $-6.715\times10^{-7}$ & 湿度二次负效应 \\
+$a_{RR}$ & $-2.167\times10^{-8}$ & 降水二次负效应 \\
+$a_{TH}$ & $8.071\times10^{-8}$ & 温度--湿度正交互 \\
+$a_{TR}$ & $8.389\times10^{-7}$ & 温度--降水正交互 \\
+$a_{HR}$ & $3.084\times10^{-7}$ & 湿度--降水正交互 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+关键发现：$a_{TR}>0$（高温下降水促进传播增强），$a_{RR}<0$（降水递减效应），$a_{HH}<0$（湿度饱和响应）。$a_0=0.180$占$\beta'$均值98\%以上。
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.9\textwidth]{../results/data2_1plus3/phase2_formula_fit_data2.png}
+\caption{Phase~2：符号回归公式与神经网络输出的拟合对比}
+\label{fig:phase2}
+\end{figure}
+
+\subsubsection{2014年极端暴发分析}
+\label{sec:p1-2014}
+
+2014年气候数据代入公式得月均$\beta'=0.183539$，与其他年份均值0.183585极为接近。说明特大暴发并非$\beta'$异常升高所致，而由输入性病例时机、蚊媒密度异常、易感人群累积等因素驱动。
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{../results/data2_1plus3/outbreak_2014_beta_compare_data2.png}
+\caption{2014年与其他年份月度$\beta'$对比}
+\label{fig:2014-beta}
+\end{figure}
+
+\subsection{讨论}
+\label{sec:p1-discussion}
+
+\textbf{可学习性}。$\rho=0.705$, $r=0.612$证实气候信息足以解释$\beta'$的显著部分方差，为公式发现提供了可靠的神经网络"教师"。
+
+\textbf{可解释性}。二次多项式以10个系数达到$R^2=0.999987$，$a_{TR}>0$量化了高温高雨协同促进传播，$a_{RR}<0$揭示了极端降水抑制作用。与Li等\cite{li2019pnas}相比，本方法无需预设函数形式，同时考虑三个变量，结果为可迁移的闭合公式。与Zhang等\cite{zhang2024plos}相比，NN预训练降低了符号搜索难度。
+
+\textbf{极端年份区分}。2014年$\beta'$与正常年份差异微小，说明暴发驱动力来自$\beta'$以外因素，与Cheng等\cite{cheng2016}的调查一致。

@@ -1,0 +1,121 @@
+%% ==================================================================
+\section{第二部分：多城市机制迁移与验证}
+\label{sec:part2}
+%% ==================================================================
+
+\subsection{引言}
+
+单城市模型发现的传播效率公式能否推广到其他城市？本章通过广东省16个地级市数据系统验证二次多项式公式的空间泛化能力。空间泛化的核心挑战在于不同城市在人口规模、城市化水平、蚊媒密度基线等方面差异显著，因此重点检验城市间相对风险排名的捕捉能力。
+
+\subsection{数据与方法}
+
+\subsubsection{16城数据概况}
+
+研究涵盖广东省16个地级市：广州、佛山、中山、江门、珠海、深圳、清远、阳江、东莞、肇庆、汕头、湛江、潮州、茂名、揭阳和惠州。数据时间范围2005--2019年，月度分辨率。气象数据来源NOAA GSOD。2014年病例数跨越三个数量级（广州37,382例至惠州37例）。
+
+\subsubsection{三种尺度化方案}
+
+\textbf{方案A（广州尺度化）}：使用广州人口和蚊媒参数，仅替换气候输入，产生"虚拟广州"预测。
+
+\textbf{方案B（非广州线性尺度化）}：引入线性校正因子$\alpha_c = \bar{C}_c / \bar{C}_{\text{GZ}}$，仅用非广州城市拟合。
+
+\textbf{方案C（非广州对数线性尺度化）}：在对数尺度上回归$\log(\hat{C}_c) = \beta_0 + \beta_1 \cdot \log(\text{risk}_c)$。
+
+\subsubsection{评估策略}
+
+"排名优先"策略：首要指标Spearman~$\rho$，辅以MAE、RMSE。2014年为年度验证年，全部15年数据用于月度评估。
+
+\subsection{结果}
+
+\subsubsection{年度排名外推验证}
+
+\begin{table}[H]
+\centering
+\caption{多城市年度排名验证结果（2014年）}
+\label{tab:transfer-annual}
+\begin{tabular}{llccccc}
+\toprule
+子集 & 方案 & $N$ & MAE & RMSE & Spearman $\rho$ & $p$值 \\
+\midrule
+全部16城 & A（广州尺度化） & 16 & 655.5 & 1499.6 & 0.900 & $2.05\times10^{-6}$ \\
+全部16城 & B（非GZ线性） & 16 & 1491.9 & 5737.1 & 0.900 & $2.05\times10^{-6}$ \\
+全部16城 & C（非GZ对数线性） & 16 & 1674.3 & 6383.3 & 0.900 & $2.05\times10^{-6}$ \\
+\midrule
+非广州15城 & A（广州尺度化） & 15 & 699.3 & 1548.8 & 0.879 & $1.63\times10^{-5}$ \\
+非广州15城 & B（非GZ线性） & 15 & 61.8 & 116.8 & 0.879 & $1.63\times10^{-5}$ \\
+非广州15城 & C（非GZ对数线性） & 15 & 84.0 & 115.2 & 0.879 & $1.63\times10^{-5}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+三种方案排名$\rho=0.900$完全一致（排名仅依赖$\beta'$积分值的相对大小）。方案B非广州15城MAE$=61.8$、RMSE$=116.8$最优。
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{../results/data2_1plus3/transfer_2014_bars_data2.png}
+\caption{2014年16城年度病例数：观测vs.模型预测}
+\label{fig:transfer-bars}
+\end{figure}
+
+\subsubsection{城市月度曲线验证}
+
+\begin{table}[H]
+\centering
+\caption{16城月度预测指标汇总（2005--2019年，每城180个月度观测）}
+\label{tab:monthly-summary}
+\begin{tabular}{lccccc}
+\toprule
+ & Pearson $r$ & Spearman $\rho$ & $R^2_{\log}$ & MAE & RMSE \\
+\midrule
+中位数 & 0.481 & 0.469 & 0.342 & 5.62 & 22.80 \\
+均值 & 0.467 & 0.462 & 0.277 & 22.47 & 134.89 \\
+最高 & 0.589 (惠州) & 0.716 (广州) & 0.603 (广州) & -- & -- \\
+最低 & 0.269 (潮州) & 0.218 (茂名) & $-0.208$ (肇庆) & -- & -- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+中位$r=0.481$和$\rho=0.469$表明公式对大多数城市能捕捉中等强度季节性趋势。
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{../results/data2_1plus3/all_cities_fit_grid.png}
+\caption{16城月度预测与观测曲线对比（2005--2019年）}
+\label{fig:all-cities-grid}
+\end{figure}
+
+\subsubsection{新旧数据集对比}
+
+\begin{table}[H]
+\centering
+\caption{新旧数据集关键指标比较}
+\label{tab:old-vs-new}
+\begin{tabular}{lcc}
+\toprule
+指标 & 旧数据集（13城/2003--2017） & 新数据集（16城/2005--2019） \\
+\midrule
+非广州排名 Spearman $\rho$ & 0.713 & 0.879 \\
+非广州排名 Kendall $\tau$ & 0.545 & 0.771 \\
+Phase~1 Pearson $r$ & 0.976 & 0.612 \\
+Phase~1 Spearman $\rho$ & 0.634 & 0.705 \\
+非广州MAE & 504.7 & 61.8 \\
+非广州RMSE & 908.7 & 116.8 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+排名相关从$\rho=0.713$提升至$\rho=0.879$（+23\%），MAE从504.7降至61.8（-88\%）。新数据集Phase~1 $\rho$从0.634提升至0.705，旧数据集高$r=0.976$来源于2014年极端暴发的主导效应。
+
+\subsubsection{敏感性分析}
+
+2005--2019年与2004--2023年两个时间窗口对比，Phase~1核心指标差异不超过5\%，多城市排名相关变化在可接受范围内。2020年后数据因COVID-19防控可能引入额外混杂。
+
+\subsection{讨论}
+
+\textbf{空间可迁移性}。$\rho=0.900$证实广州发现的气候--$\beta'$关系具有空间泛化能力，理论基础在于登革热病毒生物传播机制在地理上的共性。
+
+\textbf{排名vs.量级}。排名优于绝对误差，因为城市间病例差异不仅来自气候，还受人口密度、蚊媒控制等非气候因素影响。公式最适合用于跨城市风险分层和资源优先分配。
+
+\textbf{与PNAS方法比较}。Li等\cite{li2019pnas}的样条$\beta(T)$不含降水湿度信息且无法以闭合公式迁移。本方法在可迁移性和可解释性方面具有显著优势。
+
+\textbf{局限性}。部分低发病城市月度相关较低（信噪比不足）；尺度化回归系数在$n=15$时可能不稳定；蚊媒密度数据仅广州可用。

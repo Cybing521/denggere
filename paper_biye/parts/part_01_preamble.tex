@@ -1,0 +1,57 @@
+\documentclass[12pt,a4paper,oneside]{ctexart}
+\setCJKmainfont{FandolSong}
+\setCJKsansfont{FandolHei}
+\setmainfont{TeX Gyre Termes}
+\usepackage[top=2.5cm,bottom=2.5cm,left=3cm,right=2.5cm]{geometry}
+\usepackage{setspace}
+\setstretch{1.35}
+\setlength{\parindent}{2em}
+\ctexset{
+  section={format=\centering\sffamily\zihao{3},beforeskip=24pt,afterskip=18pt},
+  subsection={format=\raggedright\sffamily\zihao{4},beforeskip=18pt,afterskip=12pt},
+  subsubsection={format=\raggedright\sffamily\zihao{-4},beforeskip=12pt,afterskip=6pt},
+}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{tabularx}
+\usepackage{longtable}
+\usepackage{float}
+\usepackage{caption}
+\captionsetup{font=footnotesize,labelsep=space}
+\usepackage{subcaption}
+\usepackage[colorlinks,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+\usepackage{cleveref}
+\usepackage{enumitem}
+\usepackage{url}
+\usepackage{natbib}
+\bibliographystyle{unsrtnat}
+\heavyrulewidth=1.5pt
+\lightrulewidth=0.75pt
+\newcommand{\bprime}{\beta^{\prime}}
+\begin{document}
+
+% ===================== 封面 =====================
+\begin{titlepage}
+\centering
+\vspace*{2cm}
+{\sffamily\zihao{2}\bfseries 本科毕业论文}\par
+\vspace{2cm}
+{\sffamily\zihao{-2}\bfseries 基于神经网络耦合动力学模型的\\[6pt]登革热传播效率发现与多城市验证}\par
+\vspace{3cm}
+{\zihao{3}
+\renewcommand{\arraystretch}{1.8}
+\begin{tabular}{r l}
+学\hspace{2em}院 & ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ \\
+专\hspace{2em}业 & ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ \\
+学\hspace{2em}号 & ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ \\
+姓\hspace{2em}名 & ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ \\
+指导教师 & ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ \\
+\end{tabular}
+}\par
+\vfill
+{\zihao{3} 二〇二六年六月}
+\end{titlepage}
+\setcounter{page}{1}
+\pagenumbering{Roman}
