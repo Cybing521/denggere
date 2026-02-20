@@ -13,3 +13,6 @@ matplotlib>=3.4.0
 
 # 数据处理
 scikit-learn>=0.24.0
+
+# 符号回归
+pysr>=1.5

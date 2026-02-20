@@ -4,10 +4,10 @@
 1) Single-city mechanism learning (Guangzhou):
    - Estimate beta(t) from cases and mosquito proxy
    - Train NN(T,H,R)->beta'
-2) Symbolic regression:
-   - Fit explicit quadratic formula to NN output
+2) Symbolic regression (PySR):
+   - Use PySR to search for optimal formula approximating NN output
 3) Transfer:
-   - Apply fixed formula to other cities (no retraining)
+   - Apply discovered formula to other cities (no retraining)
    - Evaluate annual 2014 cross-city ranking and scale errors
 """
 
@@ -23,9 +23,8 @@ import torch
 import torch.nn as nn
 from scipy.ndimage import gaussian_filter1d
 from scipy.stats import pearsonr, spearmanr
-from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error, r2_score
-from sklearn.preprocessing import PolynomialFeatures
+from pysr import PySRRegressor
 
 import matplotlib
 
@@ -190,45 +189,47 @@ def evaluate_cases(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]:
     return out
 
 
-def poly2_formula(t: np.ndarray, h: np.ndarray, r: np.ndarray, p: np.ndarray) -> np.ndarray:
-    a0, a_t, a_h, a_r, a_tt, a_hh, a_rr, a_th, a_tr, a_hr = p
-    y = (
-        a0
-        + a_t * t
-        + a_h * h
-        + a_r * r
-        + a_tt * t**2
-        + a_hh * h**2
-        + a_rr * r**2
-        + a_th * t * h
-        + a_tr * t * r
-        + a_hr * h * r
+def fit_formula_pysr(
+    weather_raw: np.ndarray,
+    beta_nn: np.ndarray,
+    niterations: int = 200,
+    timeout: int = 600,
+) -> Tuple[PySRRegressor, Dict[str, float]]:
+    """Use PySR to search for the best symbolic formula: beta' = f(T, H, R)."""
+    model = PySRRegressor(
+        binary_operators=["+", "-", "*", "/"],
+        unary_operators=["exp", "square", "cos"],
+        niterations=niterations,
+        maxsize=25,
+        maxdepth=8,
+        populations=30,
+        population_size=50,
+        model_selection="best",
+        early_stop_condition="stop_if(loss, complexity) = loss < 1e-6 && complexity < 15",
+        timeout_in_seconds=timeout,
+        progress=True,
+        temp_equation_file=True,
     )
-    return np.maximum(y, 0.0)
+    model.fit(weather_raw, beta_nn, variable_names=["T", "H", "R"])
 
-
-def fit_formula(weather_raw: np.ndarray, beta_nn: np.ndarray) -> Tuple[np.ndarray, Dict[str, float]]:
-    pf = PolynomialFeatures(degree=2, include_bias=True)
-    xp = pf.fit_transform(weather_raw)
-    reg = LinearRegression(fit_intercept=False).fit(xp, beta_nn)
-    coef = reg.coef_
-    # PolynomialFeatures order: [1,T,H,R,T^2,TH,TR,H^2,HR,R^2]
-    params = coef[[0, 1, 2, 3, 4, 7, 9, 5, 6, 8]]
-    pred = np.maximum(reg.predict(xp), 0.0)
+    pred = np.maximum(model.predict(weather_raw), 0.0)
     met = {
         "r2": float(r2_score(beta_nn, pred)),
         "corr": float(pearsonr(beta_nn, pred)[0]) if np.std(pred) > 0 and np.std(beta_nn) > 0 else np.nan,
         "rmse": float(np.sqrt(mean_squared_error(beta_nn, pred))),
         "mae": float(np.mean(np.abs(beta_nn - pred))),
     }
-    return params, met
+    return model, met
 
 
-def predict_city_risk_monthly(city_df: pd.DataFrame, params: np.ndarray) -> pd.DataFrame:
-    t = city_df["tem"].values.astype(float)
-    h = city_df["rhu"].values.astype(float)
-    r = city_df["pre"].values.astype(float)
-    beta = poly2_formula(t, h, r, params)
+def predict_with_pysr(model: PySRRegressor, weather_raw: np.ndarray) -> np.ndarray:
+    """Predict beta' using the PySR best equation, clipped to >= 0."""
+    return np.maximum(model.predict(weather_raw), 0.0)
+
+
+def predict_city_risk_monthly(city_df: pd.DataFrame, sr_model: PySRRegressor) -> pd.DataFrame:
+    weather = city_df[["tem", "rhu", "pre"]].values.astype(float)
+    beta = predict_with_pysr(sr_model, weather)
     m_norm = city_df["index_norm_city"].values.astype(float)
     cases = city_df["cases"].values.astype(float)
 
@@ -345,14 +346,19 @@ def plot_phase1(gz: pd.DataFrame, pred_cases: np.ndarray, phase1_metrics: Dict[s
     plt.close(fig)
 
 
-def plot_phase2_formula(beta_nn: np.ndarray, beta_formula: np.ndarray) -> None:
+def plot_phase2_formula(beta_nn: np.ndarray, beta_formula: np.ndarray, equation_str: str = "") -> None:
     fig, ax = plt.subplots(figsize=(6.2, 5.5))
     ax.scatter(beta_nn, beta_formula, s=18, alpha=0.7)
     mx = max(beta_nn.max(), beta_formula.max()) * 1.03
     ax.plot([0, mx], [0, mx], "k--", lw=1)
     r2 = r2_score(beta_nn, beta_formula)
     corr = pearsonr(beta_nn, beta_formula)[0] if np.std(beta_nn) > 0 and np.std(beta_formula) > 0 else np.nan
-    ax.set_title(f"Formula vs NN beta\nR2={r2:.4f}, r={corr:.4f}")
+    title = f"PySR Formula vs NN beta\nR2={r2:.4f}, r={corr:.4f}"
+    if equation_str:
+        # Truncate long equations for title readability
+        eq_display = equation_str if len(equation_str) < 80 else equation_str[:77] + "..."
+        title += f"\n{eq_display}"
+    ax.set_title(title, fontsize=9)
     ax.set_xlabel("NN beta")
     ax.set_ylabel("Formula beta")
     ax.grid(alpha=0.25)
@@ -450,9 +456,10 @@ def main() -> None:
     phase1_metrics = evaluate_cases(cases[train_mask], pred_cases[train_mask])
     pd.DataFrame([phase1_metrics]).to_csv(OUT / "phase1_metrics_data2.csv", index=False)
 
-    # 2) Symbolic regression (quadratic)
-    params, f_metrics = fit_formula(weather, beta_nn)
-    beta_formula_gz = poly2_formula(weather[:, 0], weather[:, 1], weather[:, 2], params)
+    # 2) Symbolic regression (PySR)
+    print("Phase 2: Running PySR symbolic regression search ...")
+    sr_model, f_metrics = fit_formula_pysr(weather, beta_nn)
+    beta_formula_gz = predict_with_pysr(sr_model, weather)
     formula_obs_metrics = {
         "r2": float(r2_score(beta_nn, beta_formula_gz)),
         "corr": float(pearsonr(beta_nn, beta_formula_gz)[0]) if np.std(beta_nn) > 0 and np.std(beta_formula_gz) > 0 else np.nan,
@@ -460,19 +467,26 @@ def main() -> None:
         "mae": float(np.mean(np.abs(beta_nn - beta_formula_gz))),
     }
     pd.DataFrame([f_metrics]).to_csv(OUT / "phase2_formula_fit_metrics_data2.csv", index=False)
-    pd.DataFrame(
-        {
-            "parameter": ["a0", "aT", "aH", "aR", "aTT", "aHH", "aRR", "aTH", "aTR", "aHR"],
-            "value": params,
-        }
-    ).to_csv(OUT / "phase2_formula_params_data2.csv", index=False)
+
+    # Save Pareto front
+    pareto_df = sr_model.equations_[["complexity", "loss", "score", "equation"]].copy()
+    pareto_df.to_csv(OUT / "phase2_pysr_pareto.csv", index=False)
+
+    # Save best equation (sympy + LaTeX)
+    best_sympy = sr_model.sympy()
+    best_latex = sr_model.latex()
+    with open(OUT / "phase2_pysr_best_equation.txt", "w") as f:
+        f.write(f"sympy: {best_sympy}\n")
+        f.write(f"latex:  {best_latex}\n")
+        f.write(f"\nmetrics: {f_metrics}\n")
+    print(f"  Best equation: {best_sympy}")
 
     # 3) Transfer to all cities (no mechanism retraining)
     city_tables = []
     for city in sorted(monthly["city_en"].unique()):
         cdf = monthly[monthly["city_en"] == city].sort_values(["year", "month"]).copy()
         cdf = attach_mosquito_proxy(cdf, bi_proxy)
-        city_tables.append(predict_city_risk_monthly(cdf, params))
+        city_tables.append(predict_city_risk_monthly(cdf, sr_model))
     transfer_monthly = pd.concat(city_tables, ignore_index=True)
     transfer_monthly.to_csv(OUT / "transfer_monthly_all_cities_data2.csv", index=False)
 
@@ -495,7 +509,7 @@ def main() -> None:
 
     # figures
     plot_phase1(gz, pred_cases, phase1_metrics, losses)
-    plot_phase2_formula(beta_nn, beta_formula_gz)
+    plot_phase2_formula(beta_nn, beta_formula_gz, equation_str=str(best_sympy))
     plot_transfer(annual2014)
 
     # export core training table
@@ -517,12 +531,13 @@ def main() -> None:
     ].to_csv(OUT / "phase1_guangzhou_predictions_data2.csv", index=False)
 
     print("=" * 72)
-    print("1+3 pipeline on data_2 completed")
+    print("1+3 pipeline on data_2 completed (PySR symbolic regression)")
     print("=" * 72)
     print(f"Year window: {YEAR_START}-{YEAR_END}")
     print(f"Phase1 metrics: {OUT / 'phase1_metrics_data2.csv'}")
     print(f"Phase2 metrics: {OUT / 'phase2_formula_fit_metrics_data2.csv'}")
-    print(f"Phase2 params:  {OUT / 'phase2_formula_params_data2.csv'}")
+    print(f"Phase2 Pareto:  {OUT / 'phase2_pysr_pareto.csv'}")
+    print(f"Phase2 best eq: {OUT / 'phase2_pysr_best_equation.txt'}")
     print(f"Transfer annual: {OUT / 'transfer_annual2014_data2.csv'}")
     print(f"Transfer metrics: {OUT / 'transfer_metrics_data2.csv'}")
     print(f"Figures: {OUT / 'phase1_guangzhou_data2.png'}, {OUT / 'phase2_formula_fit_data2.png'},")
