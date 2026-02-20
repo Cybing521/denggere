@@ -22,6 +22,7 @@ import pandas as pd
 import torch
 import torch.nn as nn
 from scipy.ndimage import gaussian_filter1d
+from scipy.optimize import brentq
 from scipy.stats import pearsonr, spearmanr
 from sklearn.metrics import mean_squared_error, r2_score
 from pysr import PySRRegressor
@@ -40,6 +41,124 @@ DATA = ROOT / "data_2" / "processed"
 OUT = ROOT / "results" / "data2_1plus3"
 YEAR_START = 2005
 YEAR_END = 2019
+
+# ── SEIR dynamics constants ──────────────────────────────────────────────
+SIGMA_H = 1.0 / 5.9       # latent-to-infectious rate (1/incubation period)
+GAMMA = 1.0 / 14.0        # recovery rate
+N_H = 1.426e7             # Guangzhou resident population
+DAYS_PER_MONTH = 30       # days per time step for Euler integration
+ETA_CANDIDATES = [0.1, 0.5, 1.0, 2.0, 5.0]  # import rate grid (persons/day)
+
+
+def seir_forward(
+    beta_series: np.ndarray,
+    m_norm: np.ndarray,
+    eta: float,
+    n_h: float = N_H,
+    days: int = DAYS_PER_MONTH,
+) -> np.ndarray:
+    """Run SEIR ODE forward simulation with Euler integration.
+
+    Args:
+        beta_series: transmission coefficient per time step (length T).
+        m_norm: normalised mosquito density per time step (length T).
+        eta: exogenous import rate (persons / day).
+        n_h: host population size.
+        days: number of daily Euler steps per time step.
+
+    Returns:
+        Monthly new case counts (length T).
+    """
+    T = len(beta_series)
+    S = n_h - 1.0
+    E = 0.0
+    I = 1.0
+    R = 0.0
+    cases_out = np.zeros(T)
+
+    for t in range(T):
+        beta_t = beta_series[t]
+        m_t = m_norm[t]
+        month_cases = 0.0
+        for _ in range(days):
+            lam = beta_t * m_t * I / n_h
+            new_exposed = lam * S
+            dS = -new_exposed
+            dE = new_exposed + eta - SIGMA_H * E
+            dI = SIGMA_H * E - GAMMA * I
+            dR = GAMMA * I
+            new_cases = SIGMA_H * max(E, 0.0)
+            month_cases += new_cases
+            S = max(S + dS, 0.0)
+            E = max(E + dE, 0.0)
+            I = max(I + dI, 0.0)
+            R = R + dR
+        cases_out[t] = month_cases
+    return cases_out
+
+
+def _solve_beta_for_month(
+    target_cases: float,
+    m_t: float,
+    eta: float,
+    S: float,
+    E: float,
+    I: float,
+    R: float,
+    n_h: float = N_H,
+    days: int = DAYS_PER_MONTH,
+) -> Tuple[float, float, float, float, float]:
+    """Solve for beta that produces target_cases in one month via bisection.
+
+    Returns (beta, S_end, E_end, I_end, R_end) after the month.
+    """
+
+    def _simulate_month(beta_val: float) -> Tuple[float, float, float, float, float]:
+        s, e, i, r = S, E, I, R
+        mc = 0.0
+        for _ in range(days):
+            lam = beta_val * m_t * i / n_h
+            ne = lam * s
+            ds = -ne
+            de = ne + eta - SIGMA_H * e
+            di = SIGMA_H * e - GAMMA * i
+            dr = GAMMA * i
+            mc += SIGMA_H * max(e, 0.0)
+            s = max(s + ds, 0.0)
+            e = max(e + de, 0.0)
+            i = max(i + di, 0.0)
+            r = r + dr
+        return mc, s, e, i, r
+
+    # Edge case: if target is near zero, beta ~ 0
+    if target_cases < 0.5:
+        mc, s, e, i, r = _simulate_month(0.0)
+        return 0.0, s, e, i, r
+
+    # Find upper bound for bisection
+    beta_lo, beta_hi = 0.0, 1.0
+    for _ in range(20):
+        mc_hi, *_ = _simulate_month(beta_hi)
+        if mc_hi >= target_cases:
+            break
+        beta_hi *= 2.0
+    else:
+        # Could not bracket; return best effort
+        mc, s, e, i, r = _simulate_month(beta_hi)
+        return beta_hi, s, e, i, r
+
+    # Bisection
+    def residual(b: float) -> float:
+        mc, *_ = _simulate_month(b)
+        return mc - target_cases
+
+    try:
+        beta_opt = brentq(residual, beta_lo, beta_hi, xtol=1e-8, maxiter=200)
+    except ValueError:
+        beta_opt = beta_hi
+
+    mc, s, e, i, r = _simulate_month(beta_opt)
+    return beta_opt, s, e, i, r
 
 
 def set_seed(seed: int = 42) -> None:
@@ -103,21 +222,56 @@ def attach_mosquito_proxy(city_df: pd.DataFrame, bi_df: pd.DataFrame) -> pd.Data
     return out
 
 
-def estimate_beta_series(cases: np.ndarray, m_norm: np.ndarray) -> Tuple[np.ndarray, float]:
-    pool = np.ones_like(cases, dtype=float)
-    for t in range(1, len(cases)):
-        pool[t] = max(cases[t - 1] + 0.3 * (cases[t - 2] if t >= 2 else 0.0), 1.0)
+def estimate_beta_series(
+    cases: np.ndarray,
+    m_norm: np.ndarray,
+    eta_candidates: List[float] = ETA_CANDIDATES,
+    n_h: float = N_H,
+) -> Tuple[np.ndarray, float, float]:
+    """Invert SEIR ODE to estimate beta(t) time series.
 
-    beta_raw = cases / (m_norm * pool + 1e-8)
-    if (beta_raw > 0).any():
-        p95 = np.percentile(beta_raw[beta_raw > 0], 95)
-    else:
-        p95 = 1.0
-    beta_clip = np.clip(beta_raw, 0.0, p95)
-    beta_smooth = gaussian_filter1d(beta_clip, sigma=1.2)
+    For each candidate eta, solve beta(t) month-by-month via bisection so that
+    the SEIR forward simulation reproduces the observed case counts.  Select the
+    eta that minimises total squared error.
+
+    Returns:
+        (beta_norm, beta_max, best_eta)
+    """
+    best_err = np.inf
+    best_beta: np.ndarray | None = None
+    best_eta = eta_candidates[0]
+
+    for eta in eta_candidates:
+        S, E, I, R = n_h - 1.0, 0.0, 1.0, 0.0
+        beta_raw = np.zeros(len(cases))
+        sim_cases = np.zeros(len(cases))
+
+        for t in range(len(cases)):
+            beta_t, S, E, I, R = _solve_beta_for_month(
+                target_cases=cases[t],
+                m_t=m_norm[t],
+                eta=eta,
+                S=S, E=E, I=I, R=R,
+                n_h=n_h,
+            )
+            beta_raw[t] = beta_t
+            # Re-simulate to get actual predicted cases for error calc
+            sim_cases[t] = seir_forward(
+                beta_raw[t : t + 1], m_norm[t : t + 1], eta, n_h, DAYS_PER_MONTH
+            )[0]
+
+        err = float(np.sum((cases - sim_cases) ** 2))
+        if err < best_err:
+            best_err = err
+            best_beta = beta_raw.copy()
+            best_eta = eta
+
+    assert best_beta is not None
+    # Smooth and normalise
+    beta_smooth = gaussian_filter1d(np.clip(best_beta, 0.0, None), sigma=1.2)
     beta_max = float(beta_smooth.max() + 1e-10)
     beta_norm = beta_smooth / beta_max
-    return beta_norm, beta_max
+    return beta_norm, beta_max, best_eta
 
 
 def weather_norm(weather: np.ndarray, norm: Norm) -> np.ndarray:
@@ -227,21 +381,37 @@ def predict_with_pysr(model: PySRRegressor, weather_raw: np.ndarray) -> np.ndarr
     return np.maximum(model.predict(weather_raw), 0.0)
 
 
-def predict_city_risk_monthly(city_df: pd.DataFrame, sr_model: PySRRegressor) -> pd.DataFrame:
+def seir_reconstruct_cases(
+    beta_series: np.ndarray,
+    beta_max: float,
+    m_norm: np.ndarray,
+    eta: float,
+    n_h: float = N_H,
+) -> np.ndarray:
+    """Reconstruct monthly cases using SEIR forward simulation.
+
+    beta_series is in normalised [0,1] space; it is scaled by beta_max before
+    feeding into the ODE.
+    """
+    return seir_forward(beta_series * beta_max, m_norm, eta, n_h)
+
+
+def predict_city_risk_monthly(
+    city_df: pd.DataFrame,
+    sr_model: PySRRegressor,
+    beta_max: float,
+    eta: float,
+    n_h: float = N_H,
+) -> pd.DataFrame:
     weather = city_df[["tem", "rhu", "pre"]].values.astype(float)
-    beta = predict_with_pysr(sr_model, weather)
+    beta_norm = predict_with_pysr(sr_model, weather)
     m_norm = city_df["index_norm_city"].values.astype(float)
-    cases = city_df["cases"].values.astype(float)
 
-    pool = np.ones_like(cases)
-    for i in range(1, len(cases)):
-        pool[i] = max(cases[i - 1] + 0.3 * (cases[i - 2] if i >= 2 else 0.0), 1.0)
+    pred_cases = seir_forward(beta_norm * beta_max, m_norm, eta, n_h)
 
-    risk = beta * m_norm * pool
     out = city_df[["city_en", "year", "month", "cases", "tem", "rhu", "pre", "index_norm_city"]].copy()
-    out["beta_formula"] = beta
-    out["risk_monthly"] = risk
-    out["pool_obs_lag"] = pool
+    out["beta_formula"] = beta_norm
+    out["risk_monthly"] = pred_cases
     return out
 
 
@@ -436,8 +606,12 @@ def main() -> None:
     norm = Norm(w_min=weather.min(axis=0), w_max=weather.max(axis=0))
     x_norm = weather_norm(weather, norm)
 
-    beta_target, beta_max = estimate_beta_series(gz["cases"].values.astype(float), gz["index_norm_city"].values.astype(float))
+    beta_target, beta_max, best_eta = estimate_beta_series(
+        gz["cases"].values.astype(float),
+        gz["index_norm_city"].values.astype(float),
+    )
     gz["beta_target"] = beta_target
+    print(f"  SEIR inversion: beta_max={beta_max:.6f}, best_eta={best_eta} persons/day")
     train_mask = gz["year"].values != 2014
 
     model, losses = train_nn(x_norm, beta_target, train_mask)
@@ -445,16 +619,25 @@ def main() -> None:
         beta_nn = model(torch.tensor(x_norm, dtype=torch.float32)).squeeze(-1).numpy()
     gz["beta_nn"] = beta_nn
 
-    # direct monthly case reconstruction with learned beta
-    cases = gz["cases"].values.astype(float)
-    pool = np.ones_like(cases)
-    for t in range(1, len(cases)):
-        pool[t] = max(cases[t - 1] + 0.3 * (cases[t - 2] if t >= 2 else 0.0), 1.0)
-    pred_cases = beta_nn * beta_max * gz["index_norm_city"].values.astype(float) * pool
+    # SEIR forward reconstruction with learned beta
+    m_norm_gz = gz["index_norm_city"].values.astype(float)
+    pred_cases = seir_reconstruct_cases(beta_nn, beta_max, m_norm_gz, best_eta)
     gz["cases_pred_nn"] = pred_cases
 
+    cases = gz["cases"].values.astype(float)
     phase1_metrics = evaluate_cases(cases[train_mask], pred_cases[train_mask])
+    phase1_metrics["best_eta"] = best_eta
     pd.DataFrame([phase1_metrics]).to_csv(OUT / "phase1_metrics_data2.csv", index=False)
+
+    # Save SEIR parameters
+    pd.DataFrame([{
+        "sigma_h": SIGMA_H,
+        "gamma": GAMMA,
+        "N_h": N_H,
+        "days_per_month": DAYS_PER_MONTH,
+        "best_eta": best_eta,
+        "beta_max": beta_max,
+    }]).to_csv(OUT / "phase1_seir_params.csv", index=False)
 
     # 2) Symbolic regression (PySR)
     print("Phase 2: Running PySR symbolic regression search ...")
@@ -486,7 +669,7 @@ def main() -> None:
     for city in sorted(monthly["city_en"].unique()):
         cdf = monthly[monthly["city_en"] == city].sort_values(["year", "month"]).copy()
         cdf = attach_mosquito_proxy(cdf, bi_proxy)
-        city_tables.append(predict_city_risk_monthly(cdf, sr_model))
+        city_tables.append(predict_city_risk_monthly(cdf, sr_model, beta_max, best_eta))
     transfer_monthly = pd.concat(city_tables, ignore_index=True)
     transfer_monthly.to_csv(OUT / "transfer_monthly_all_cities_data2.csv", index=False)
 
@@ -531,10 +714,12 @@ def main() -> None:
     ].to_csv(OUT / "phase1_guangzhou_predictions_data2.csv", index=False)
 
     print("=" * 72)
-    print("1+3 pipeline on data_2 completed (PySR symbolic regression)")
+    print("1+3 pipeline on data_2 completed (SEIR ODE + PySR)")
     print("=" * 72)
     print(f"Year window: {YEAR_START}-{YEAR_END}")
+    print(f"SEIR params:    sigma_h={SIGMA_H:.4f}, gamma={GAMMA:.4f}, N_h={N_H:.0f}, eta={best_eta}")
     print(f"Phase1 metrics: {OUT / 'phase1_metrics_data2.csv'}")
+    print(f"Phase1 SEIR:    {OUT / 'phase1_seir_params.csv'}")
     print(f"Phase2 metrics: {OUT / 'phase2_formula_fit_metrics_data2.csv'}")
     print(f"Phase2 Pareto:  {OUT / 'phase2_pysr_pareto.csv'}")
     print(f"Phase2 best eq: {OUT / 'phase2_pysr_best_equation.txt'}")
