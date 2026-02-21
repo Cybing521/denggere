@@ -36,7 +36,7 @@ plt.rcParams["axes.unicode_minus"] = False
 
 
 ROOT = Path("/root/wenmei")
-DATA = ROOT / "data_2" / "processed"
+DATA = ROOT / "data" / "processed"
 OUT = ROOT / "results" / "data2_1plus3"
 YEAR_START = 2005
 YEAR_END = 2019

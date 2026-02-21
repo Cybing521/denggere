@@ -20,7 +20,7 @@ plt.rcParams["font.sans-serif"] = ["Noto Sans CJK JP", "DejaVu Sans"]
 plt.rcParams["axes.unicode_minus"] = False
 
 ROOT = Path("/root/wenmei")
-DATA = ROOT / "data_2" / "processed"
+DATA = ROOT / "data" / "processed"
 OUT = ROOT / "results" / "data2_1plus3"
 FIG_DIR = OUT / "city_fit_curves"
 

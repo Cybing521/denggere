@@ -22,7 +22,7 @@ import pandas as pd
 
 
 ROOT = Path("/root/wenmei")
-DATA2 = ROOT / "data_2"
+DATA2 = ROOT / "data"
 OUT = DATA2 / "processed"
 YEAR_START = 2005
 YEAR_END = 2019
