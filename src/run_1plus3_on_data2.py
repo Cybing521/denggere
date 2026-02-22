@@ -134,14 +134,15 @@ def weather_norm(raw, norm):
     rng = norm.w_max - norm.w_min; rng[rng == 0] = 1.0
     return (raw - norm.w_min) / rng
 
-def build_extended_features(w_norm, months, m_norm):
+def build_extended_features(w_norm, months):
+    """7-dim input: T/H/R_norm, sin/cos(month), T_lag, R_lag.  No mosquito density
+    — M̂ acts only through λ = β'·M̂·i, keeping β' as a pure climate effect."""
     T = len(w_norm)
     rad = 2 * np.pi * months / 12.0
     t_lag = np.zeros(T); t_lag[1:] = w_norm[:-1, 0]; t_lag[0] = w_norm[0, 0]
     r_lag = np.zeros(T); r_lag[1:] = w_norm[:-1, 2]; r_lag[0] = w_norm[0, 2]
-    m_feat = m_norm / (m_norm.max() + 1e-10)
     return np.column_stack([w_norm, np.sin(rad).reshape(-1,1), np.cos(rad).reshape(-1,1),
-                            t_lag.reshape(-1,1), r_lag.reshape(-1,1), m_feat.reshape(-1,1)])
+                            t_lag.reshape(-1,1), r_lag.reshape(-1,1)])
 
 def attach_mosquito_proxy(city_df, bi_proxy, city):
     bi_city = bi_proxy[bi_proxy["city_en"] == city][["year", "month", "index_norm_city"]].copy()
@@ -160,7 +161,7 @@ def attach_mosquito_proxy(city_df, bi_proxy, city):
 # ── NN ───────────────────────────────────────────────────────────────────
 
 class TransmissionNN(nn.Module):
-    def __init__(self, n_input=8, n_hidden=32):
+    def __init__(self, n_input=7, n_hidden=32):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(n_input, n_hidden), nn.Softplus(),
@@ -457,7 +458,7 @@ def main():
 
     # ── Phase 1b: Train NN ───────────────────────────────────────────
     print("Phase 1b: Training NN beta = f(weather, month, M) ...", flush=True)
-    x_ext = build_extended_features(x_norm, gz["month"].values, m_norm_gz)
+    x_ext = build_extended_features(x_norm, gz["month"].values)
     nn_model, losses = train_nn_beta(x_ext, beta_smooth, train_mask)
     beta_nn = nn_predict_beta(nn_model, x_ext)
 
