@@ -89,9 +89,9 @@ and Multi-City Validation}
 
 本文提出一种"神经网络耦合SEIR动力学+符号回归"三阶段混合建模框架，旨在兼顾机制可解释性与数据适应性。该框架包含三个核心阶段：(1) 基于SEIR仓室模型反演月尺度传播系数$\beta'$时间序列；(2) 以多层感知机(MLP)学习气候变量（温度$T$、降水$R$、相对湿度$H$）到$\beta'$的非线性映射，实现逐月病例数预测；(3) 利用符号回归对神经网络进行知识蒸馏，发现可解释的闭合公式。
 
-研究分为两个部分。第一部分以广州市为单城市案例（2005--2019年双周数据）。Phase~1阶段，耦合模型对广州月度病例的预测达到Pearson相关系数$r=0.612$、Spearman秩相关$\rho=0.705$、对数$R^2=0.450$、MAE$=51.23$。Phase~2阶段，符号回归从物理模板族和多项式族两类候选中发现最优公式，其中二次多项式含交互项的公式以$R^2=0.999987$的精度拟合神经网络输出，揭示了温度--降水正交互（$a_{TR}>0$）和降水平方负效应（$a_{RR}<0$）等物理规律。对2014年特大暴发的分析表明，该公式能区分极端年份的气候异常信号。
+研究分为两个部分。第一部分以广州市为单城市案例（2005--2019年月度数据）。Phase~1阶段，通过SEIR逆问题求解（Brent二分法）反演月度传播系数$\beta'(t)$，再以MLP在对数空间中拟合$\beta'$与气候变量的映射关系。耦合模型对广州月度病例的预测达到Pearson相关系数$r=0.777$、Spearman秩相关$\rho=0.794$、MAE$=37.9$。基于$\beta'$计算的基本再生数$R_0$均值为1.06，最大值达6.52（2014年9月），在180个月中有46\%的月份$R_0>1$。留一年交叉验证（15折）的平均$r=0.479\pm0.320$、$\rho=0.563\pm0.331$。Phase~2阶段，从物理模板族和多项式族两类候选中发现最优公式，其中二次多项式含交互项的公式以$R^2=0.242$拟合NN输出，揭示了温度--湿度正交互（$a_{TH}>0$）和降水平方负效应（$a_{RR}<0$）等物理规律。对2014年特大暴发的分析表明，该年NN预测的$\beta'$较其他年份高出28\%，SEIR反演的真实$\beta'$高出74\%，说明气候因素仅能解释实际传播效率增幅的约三分之一。
 
-第二部分将广州发现的公式迁移至广东省16个地级市（2005--2019年），采用三种城市尺度化方案进行年度和月度验证。结果表明，16城年度总病例排名的Spearman相关$\rho=0.900$（$p=2.05\times10^{-6}$），非广州15城MAE$=61.8$、RMSE$=116.8$，证实了公式的空间泛化能力。城市月度曲线的中位Pearson~$r=0.481$、中位Spearman~$\rho=0.469$，表明公式可捕捉多数城市的季节性趋势。
+第二部分将广州发现的公式迁移至广东省16个地级市（2005--2019年）。结果表明，16城年度总病例排名的Spearman相关$\rho=0.950$，非广州15城$\rho=0.939$、MAE$=484.4$，证实了公式的空间泛化能力。城市月度曲线的中位Pearson~$r=0.517$、中位Spearman~$\rho=0.470$，表明公式可捕捉多数城市的季节性趋势。与历史月均值、线性回归、季节朴素法三种基线模型相比，SEIR+NN模型在16城平均Spearman~$\rho$（0.495 vs 0.384/0.245/0.466）和$R^2_{\log}$（0.320 vs $-0.179$/$-0.717$/0.022）上均取得最优表现。
 
 本研究的主要创新包括：(1) 提出"NN逆问题+符号蒸馏"范式，克服了传统SEIR模型依赖先验函数形式的局限；(2) 发现的闭合公式具有明确物理含义且可直接迁移至其他城市；(3) 系统验证了单城市机制在多城市空间尺度上的可迁移性；(4) 相比Li等(2019 PNAS)的样条方法和Zhang等(2024)的纯符号回归方法，本框架在可解释性和泛化性之间取得了更好的平衡。
 
@@ -108,9 +108,9 @@ Dengue fever is one of the most severe mosquito-borne infectious diseases global
 
 This thesis proposes a three-stage hybrid modeling framework---``Neural-Network-Coupled SEIR Dynamics + Symbolic Regression''---that aims to balance mechanistic interpretability with data adaptability. The framework consists of three core stages: (1)~inverting monthly transmission coefficients $\beta'$ from observed case data via an SEIR compartmental model; (2)~training a multilayer perceptron (MLP) to learn the nonlinear mapping from climate variables (temperature~$T$, precipitation~$R$, relative humidity~$H$) to $\beta'$, enabling month-by-month case prediction; (3)~performing knowledge distillation of the neural network via symbolic regression to discover interpretable closed-form formulas.
 
-The study is organized into two parts. Part~I uses Guangzhou as a single-city case study (2005--2019 biweekly data). In Phase~1, the coupled model achieves a Pearson correlation of $r=0.612$, Spearman rank correlation of $\rho=0.705$, log-scale $R^2=0.450$, and MAE${}=51.23$ for Guangzhou monthly cases. In Phase~2, symbolic regression discovers the optimal formula from two candidate families---physical-template and polynomial. The quadratic polynomial with interaction terms fits the neural network output with $R^2=0.999987$, revealing physical patterns such as positive temperature--precipitation interaction ($a_{TR}>0$) and a negative quadratic rainfall effect ($a_{RR}<0$). Analysis of the extreme 2014 outbreak demonstrates that the formula can distinguish anomalous climate signals in extreme years.
+The study is organized into two parts. Part~I uses Guangzhou as a single-city case study (2005--2019 monthly data). In Phase~1, the SEIR inverse problem is solved via Brent bisection to recover monthly transmission coefficients $\beta'(t)$, achieving an inversion $R^2_{\log}=0.969$. An MLP then learns the climate-to-$\beta'$ mapping in log-space. The coupled model achieves Pearson $r=0.777$, Spearman $\rho=0.794$, and MAE${}=37.9$ for Guangzhou monthly cases. The basic reproduction number $R_0$ averages 1.06 with a maximum of 6.52 (September 2014), and $R_0>1$ in 46\% of months. Leave-one-year-out cross-validation (15 folds) yields mean $r=0.479\pm0.320$ and $\rho=0.563\pm0.331$. In Phase~2, knowledge distillation discovers the optimal formula from two candidate families---physical-template ($R^2=0.188$, 6 parameters) and polynomial ($R^2=0.242$, 10 parameters)---revealing a dominant temperature--humidity synergy ($a_{TH}>0$) and a negative quadratic rainfall effect ($a_{RR}<0$). Analysis of the extreme 2014 outbreak shows that the NN-predicted $\beta'$ is 28\% higher than other years, while the SEIR-inverted true $\beta'$ is 74\% higher, indicating that climate factors explain roughly one-third of the actual transmission efficiency increase.
 
-Part~II transfers the formula discovered in Guangzhou to 16 prefecture-level cities in Guangdong Province (2005--2019), employing three city-level scaling schemes for annual and monthly validation. Results show that the Spearman correlation of 2014 annual total cases across 16~cities is $\rho=0.900$ ($p=2.05\times10^{-6}$), with non-Guangzhou 15-city MAE${}=61.8$ and RMSE${}=116.8$, confirming the spatial generalizability of the formula. City-level monthly curves yield a median Pearson~$r=0.481$ and median Spearman~$\rho=0.469$, indicating that the formula captures the seasonal trend for most cities.
+Part~II transfers the formula discovered in Guangzhou to 16 prefecture-level cities in Guangdong Province (2005--2019). Results show that the Spearman correlation of 2014 annual total cases across 16~cities is $\rho=0.950$, with non-Guangzhou 15-city $\rho=0.939$ and MAE${}=484.4$, confirming the spatial generalizability. City-level monthly curves yield a median Pearson~$r=0.517$ and median Spearman~$\rho=0.470$. Compared with three baseline models (historical mean, linear regression, seasonal naive), the SEIR+NN model achieves the best 16-city average Spearman~$\rho$ (0.495 vs 0.384/0.245/0.466) and $R^2_{\log}$ (0.320 vs $-0.179$/$-0.717$/0.022).
 
 Key innovations include: (1)~a ``neural-network inverse problem + symbolic distillation'' paradigm that overcomes the reliance on \textit{a priori} functional forms in traditional SEIR models; (2)~a discovered closed-form formula with clear physical meaning that can be directly transferred to other cities; (3)~systematic validation of single-city mechanisms at the multi-city spatial scale; (4)~an improved balance between interpretability and generalizability compared with the spline approach of Li~et~al.\ (2019, PNAS) and the pure symbolic regression approach of Zhang~et~al.\ (2024).
 
@@ -161,7 +161,7 @@ Key innovations include: (1)~a ``neural-network inverse problem + symbolic disti
 \vspace{0.3em}
 
 基于上述文献回顾，本文提出以下研究目标：
-（1）构建"SEIR动力学+神经网络+符号回归"三阶段混合建模框架，从时间序列数据中自动发现气候变量到登革热传播系数$\beta'$的最优函数关系。（2）以广州市为核心案例，利用2005--2019年双周尺度病例和气候数据，训练耦合模型并提取可解释闭合公式。（3）将发现的公式迁移至广东省16个地级市，在空间维度上验证其泛化能力和可迁移性。（4）与现有方法（尤其是Li等2019年PNAS的样条方法和Zhang等2024年的纯符号回归方法）进行比较，论证本框架在可解释性--泛化性平衡方面的优势。
+（1）构建"SEIR动力学反演+神经网络+符号蒸馏"三阶段混合建模框架，从时间序列数据中自动发现气候变量到登革热传播系数$\beta'$的最优函数关系。（2）以广州市为核心案例，利用2005--2019年月度病例和气候数据，通过SEIR逆问题求解反演$\beta'(t)$，训练耦合模型并提取可解释闭合公式。（3）将发现的公式迁移至广东省16个地级市，在空间维度上验证其泛化能力和可迁移性。（4）与现有方法（尤其是Li等2019年PNAS的样条方法和Zhang等2024年的纯符号回归方法）进行比较，论证本框架在可解释性--泛化性平衡方面的优势。
 
 与现有工作相比，本文的创新点包括：
 （1）\textbf{方法论创新——"NN逆问题+符号蒸馏"范式}：不同于Li等\cite{li2019pnas}预设样条函数形式，本文通过神经网络自由学习$\beta'$的气候映射关系，再用符号回归提取公式，实现了"数据驱动的函数发现"。（2）\textbf{多变量联合建模}：不同于仅考虑温度单一变量的传统做法，本文同时纳入温度、降水和相对湿度三个气候变量及其交互效应。（3）\textbf{可迁移的闭合公式}：符号回归发现的二次多项式公式具有明确的系数含义，可直接通过城市尺度参数进行迁移，无需在每个城市重新训练模型。（4）\textbf{系统性的空间验证}：通过16城年度排名和月度曲线的双重验证，首次在中国南方多城市尺度上系统评估了单城市发现的传播效率公式的空间泛化性能。
@@ -183,7 +183,7 @@ Key innovations include: (1)~a ``neural-network inverse problem + symbolic disti
 
 广州市长期以来是我国登革热防控的重点区域，其亚热带季风气候极适宜白纹伊蚊孳生。特别是2014年，广州经历了历史罕见的大规模暴发，病例数超45{,}000例\cite{chengj2021}。本章以广州市为例，提出一种结合了"数据挖掘"与"机理建模"的方法，旨在回答一个关键问题：在真实环境中，温度、湿度和降雨通过什么样的数学关系决定登革热传播效率$\beta'$？本章首先利用SEIR动力学模型耦合神经网络，从历史数据中还原出隐含的传播率时间序列，再通过符号回归方法，从复杂的神经网络中提取出具有物理意义的数学公式，以此揭示广州登革热暴发背后的环境驱动机制。
 
-选择广州作为核心案例的理由包括：(1)~广州拥有相对完整的病例报告系统和气候监测网络，是检验新方法的理想试验田；(2)~2005--2019年的15年跨度涵盖了多个暴发年份（尤其是2014年特大暴发），为模型提供了充分的信号变异性；(3)~选择双周（biweekly）为时间分辨率，既保留了足够的动态细节，又避免了日数据中过多的随机噪声。
+选择广州作为核心案例的理由包括：(1)~广州拥有相对完整的病例报告系统和气候监测网络，是检验新方法的理想试验田；(2)~2005--2019年的15年跨度涵盖了多个暴发年份（尤其是2014年特大暴发），为模型提供了充分的信号变异性；(3)~选择月度（monthly）为时间分辨率，在保留季节性动态特征的同时，有效降低了短时间尺度数据中零膨胀噪声的干扰。
 
 \subsection{数据材料和方法}
 \label{sec:p1-method}
@@ -218,63 +218,69 @@ x_{\text{norm}} = \frac{x - x_{\min}}{x_{\max} - x_{\min}}
 \subsubsection{动力学模型的构建过程}
 \label{sec:p1-seir}
 
-本文采用经典的SEIR仓室模型描述登革热在人群中的传播动态。将总人口$N_h$划分为四个互斥的状态仓室：易感者$S$、暴露者（潜伏期）$E$、感染者$I$和恢复者$R$，满足$N_h = S + E + I + R$。控制方程为：
+本文采用经典的SEIR仓室模型描述登革热在人群中的传播动态\cite{keeling2008}。将总人口$N_h$划分为四个互斥的状态仓室：易感者$S$、暴露者（潜伏期）$E$、感染者$I$和恢复者$R$，满足$N_h = S + E + I + R$。为提高数值稳定性，采用归一化状态变量$s=S/N_h$、$e=E/N_h$、$i=I/N_h$、$r=R/N_h$，控制方程为\cite{anderson1991}：
 \begin{equation}
 \label{eq:seir}
 \begin{aligned}
-\frac{dS}{dt} &= -\lambda(t) \cdot S \\[4pt]
-\frac{dE}{dt} &= \lambda(t) \cdot S + \eta - \sigma_h \cdot E \\[4pt]
-\frac{dI}{dt} &= \sigma_h \cdot E - \gamma \cdot I \\[4pt]
-\frac{dR}{dt} &= \gamma \cdot I
+\frac{ds}{dt} &= -\lambda(t) \cdot s \\[4pt]
+\frac{de}{dt} &= \lambda(t) \cdot s + \frac{\eta}{N_h} - \sigma_h \cdot e \\[4pt]
+\frac{di}{dt} &= \sigma_h \cdot e - \gamma \cdot i \\[4pt]
+\frac{dr}{dt} &= \gamma \cdot i
 \end{aligned}
 \end{equation}
-其中$\lambda(t)$为时变感染力（Force of Infection），定义为：
+其中$\lambda(t)$为时变感染力（Force of Infection），定义为\cite{smith2012}：
 \begin{equation}
 \label{eq:foi}
-\lambda(t) = \beta'(t) \cdot \frac{\hat{M}(t)}{N_h} \cdot I(t)
+\lambda(t) = \beta'(t) \cdot \hat{M}(t) \cdot i(t)
 \end{equation}
+归一化形式消除了$N_h$在感染力分母中的出现，使得$\beta'$的量级不依赖于人口规模，有利于梯度传播和跨城市迁移。每月新增病例数通过对$\sigma_h \cdot e(t) \cdot N_h$在月内逐日累加获得。
 
 \subsubsection{模型假设与参数设置}
 \label{sec:p1-params}
 
 模型的关键参数及其取值如下：
-（1）$\beta'(t)$：有效传播系数，综合反映蚊虫叮咬率、人--蚊--人传播概率等因素的时变参数，是本文核心待估量，单位为day$^{-1}$。（2）$\hat{M}(t)$：标准化蚊虫密度（无量纲），由布雷图指数归一化得到，反映了媒介数量的时间波动。（3）$\sigma_h = 1/5.9 \approx 0.169$~day$^{-1}$：人体潜伏期转化率，登革热人体内潜伏期均值约为5.9天\cite{chan2012}。（4）$\gamma = 1/14 \approx 0.071$~day$^{-1}$：恢复率，登革热感染期约为14天\cite{mordecai2017}。（5）$\eta$：输入项，表示外源性暴露输入，为可训练参数，反映输入性病例引起的背景感染压力。（6）$N_h = 1.426\times10^7$：广州市常住人口\cite{ccm14}。
+（1）$\beta'(t)$：有效传播系数，综合反映蚊虫叮咬率、人--蚊--人传播概率等因素的时变参数，是本文核心待估量，单位为day$^{-1}$。（2）$\hat{M}(t)$：标准化蚊虫密度（无量纲），由布雷图指数除以其时间均值得到，反映了媒介数量的相对波动\cite{focks2003}。（3）$\sigma_h = 1/5.9 \approx 0.169$~day$^{-1}$：人体潜伏期转化率，登革热人体内潜伏期均值约为5.9天\cite{chan2012}。（4）$\gamma = 1/14 \approx 0.071$~day$^{-1}$：恢复率，登革热感染期约为14天\cite{mordecai2017}。（5）$\eta$：外源输入率（人/天），表示输入性病例引起的背景感染压力，通过网格搜索$\eta \in \{0.01, 0.02, 0.05, 0.1, 0.2\}$选取使训练集$R^2_{\log}$最高的值。（6）$N_h = 1.426\times10^7$：广州市常住人口\cite{ccm14}。
 
-模型方程的时间单位为天，在数值积分时采用逐日步进、双周/月度聚合的策略：在每个双周时段内以日为步长对方程组进行数值积分（使用四阶Runge-Kutta方法），然后将每双周的新增感染者$\sum \sigma_h \cdot E \cdot \Delta t$作为该双周的模型预测病例数。
+模型方程的时间单位为天，在数值积分时采用逐日Euler步进、月度聚合的策略\cite{butcher2016}：在每个月度时段内以日为步长对归一化方程组进行前向Euler积分，然后将每月的新增感染者$\sum_{d=1}^{30} \sigma_h \cdot e(d) \cdot N_h$作为该月的模型预测病例数。选择Euler方法而非高阶Runge-Kutta方法，是因为在$\beta' < 1$、$i \ll 1$的条件下，日步长的Euler积分已具有足够精度，且计算效率更高。
 
-基本再生数$R_0$可以表示为：
+基本再生数$R_0$可以表示为\cite{vandendriessche2002}：
 \begin{equation}
 \label{eq:r0}
 R_0 = \frac{\beta' \cdot \hat{M}}{\gamma}
 \end{equation}
+当$R_0 > 1$时，疾病具有传播扩散的潜力；当$R_0 < 1$时，疫情趋于消退。
 
 \subsubsection{神经网络耦合框架}
 \label{sec:p1-nn}
 
-为学习气候变量到传播系数$\beta'$的非线性映射关系，本文构建了一个多层感知机（MLP）神经网络。网络架构为：输入层3个神经元（$T_{\text{norm}}$、$R_{\text{norm}}$、$H_{\text{norm}}$），隐藏层1为16个神经元（Softplus激活函数，$f(x)=\ln(1+e^x)$），隐藏层2为16个神经元（Softplus激活），输出层1个神经元（Sigmoid激活函数，输出范围$(0,1)$）。模型总参数量为$3\times16+16+16\times16+16+16\times1+1 = 353$个。
+为学习气候变量到传播系数$\beta'$的非线性映射关系，本文构建了一个多层感知机（MLP）神经网络。网络输入为8维扩展特征向量：归一化气象三要素（$T_{\text{norm}}$、$H_{\text{norm}}$、$R_{\text{norm}}$）、月份周期编码（$\sin(2\pi m/12)$、$\cos(2\pi m/12)$）、温度和降雨的一阶滞后（$T_{t-1}$、$R_{t-1}$）、以及归一化蚊媒密度$\hat{M}_{\text{norm}}$。网络架构为：隐藏层1为32个神经元（Softplus激活函数，$f(x)=\ln(1+e^x)$），隐藏层2为32个神经元（Softplus激活），输出层1个神经元（Softplus激活，保证非负性）。模型总参数量为$8\times32+32+32\times32+32+32\times1+1 = 1{,}345$个。
 
-选择小规模网络基于以下考虑：(1)~训练样本有限（168个观测点，排除2014年），避免过拟合；(2)~后续符号回归需要逼近网络输出，过于复杂的网络会增加蒸馏难度；(3)~两层隐藏层已能表达温度单峰响应和多变量交互效应。Softplus激活函数保证了物理过程的光滑性和非负性导数特性，Sigmoid输出层将$\beta'$约束在合理的正值范围内。
+选择该网络规模基于以下考虑：(1)~输入维度从3扩展到8后，需要更大的隐藏层容量来捕捉多变量交互效应；(2)~训练样本为168个月度观测点（排除2014年），32个隐藏神经元在表达能力与过拟合风险之间取得平衡；(3)~后续符号回归需要逼近网络输出，适度的网络复杂度有利于知识蒸馏。Softplus激活函数保证了物理过程的光滑性和非负性导数特性，输出层同样使用Softplus以保证$\beta' \geq 0$。
 
-传播效率$\beta'$由网络输出经缩放得到：
+传播效率$\beta'$由网络在对数空间中的输出经逆变换得到：
 \begin{equation}
 \label{eq:nn-beta}
-\beta'(T,H,R;\boldsymbol{\theta}) = s_1 \cdot \text{MLP}(T_{\text{norm}},H_{\text{norm}},R_{\text{norm}};\boldsymbol{\theta}) + s_0
+\beta'(T,H,R,m,\hat{M};\boldsymbol{\theta}) = \exp\!\bigl(\text{MLP}(\mathbf{x}_{\text{ext}};\boldsymbol{\theta})\bigr) - 1
 \end{equation}
-其中$s_0$、$s_1$为缩放因子，$\boldsymbol{\theta}$为网络参数。
+其中$\mathbf{x}_{\text{ext}}$为8维扩展特征向量，$\boldsymbol{\theta}$为网络参数。对数空间训练有效缓解了$\beta'$分布右偏（大量接近零、少数极大值）带来的梯度不平衡问题。
 
 \subsubsection{训练策略与损失函数}
 \label{sec:p1-training}
 
-训练采用端到端策略：将神经网络嵌入SEIR动力学求解器中，通过PyTorch自动微分机制反向传播梯度。利用Runge-Kutta方法数值积分求解SEIR方程，得到预测的区间新增病例数$\hat{C}$。
+与端到端训练不同，本文采用两步法策略\cite{raissi2019}，将传播率估计分解为SEIR逆问题求解和监督学习两个阶段：
 
-损失函数设计为均方误差（MSE）与相关系数的加权组合：
+\textbf{Step~1：SEIR逆问题求解}。给定每月观测病例数$C_t^{\text{obs}}$和蚊媒密度$\hat{M}(t)$，利用Brent二分法\cite{brent1973}在$[0, 200]$区间内搜索唯一的$\beta'(t)$，使得SEIR正向模拟的月新增病例数等于观测值。该过程沿时间轴顺序执行，每月求解后更新SEIR状态$(s,e,i,r)$，确保状态连续性。外源输入率$\eta$通过网格搜索$\{0.01, 0.02, 0.05, 0.1, 0.2\}$~人/天选取，以训练集$R^2_{\log}$最高为准则。反演得到的$\beta'(t)$序列经高斯平滑（$\sigma=2$个月）处理，以消除零膨胀噪声并保留季节性趋势。
+
+\textbf{Step~2：神经网络监督学习}。以平滑后的$\beta'(t)$为目标，在对数空间$\log(1+\beta')$中训练MLP。损失函数设计为Huber损失\cite{huber1964}与相关系数的加权组合：
 \begin{equation}
 \label{eq:loss}
-\mathcal{L}(\boldsymbol{\theta}) = \frac{1}{N}\sum_{t=1}^{N}(\hat{C}_t - C_t^{\text{obs}})^2 - \alpha \cdot \text{Corr}(\hat{\mathbf{C}}, \mathbf{C}^{\text{obs}})
+\mathcal{L}(\boldsymbol{\theta}) = \text{Huber}\!\bigl(\log(1+\hat{\beta}'),\;\log(1+\beta'_{\text{target}})\bigr) - \alpha \cdot \text{Corr}(\hat{\beta}', \beta'_{\text{target}})
 \end{equation}
-其中$N$为训练集时间步长总数（排除2014年后的有效样本$n=168$），$\alpha=0.5$为平衡权重系数。Correlation项越大表明预测趋势与实际趋势的一致性越高。
+其中$\alpha=0.5$为平衡权重系数。选择Huber损失而非MSE，是因为$\beta'$分布右偏，Huber损失对极端值更鲁棒\cite{huber1964}。Correlation项鼓励网络捕捉$\beta'$的季节性变化趋势。
 
-参数更新采用Adam优化器\cite{kingma2015}，初始学习率$10^{-3}$，结合余弦退火（Cosine Annealing）学习率调度策略。为验证模型在极端条件下的泛化能力，采用严格的"留一法"策略：将2014年全部数据作为独立测试集，训练过程中通过掩膜机制屏蔽，仅计算和优化除2014年以外年份的损失函数。这种设计迫使神经网络学习到气象因素与传播率之间的普适非线性关系，而非简单记忆历史数据。
+参数更新采用Adam优化器\cite{kingma2015}，初始学习率$5\times10^{-3}$，权重衰减$10^{-4}$，结合余弦退火（Cosine Annealing）学习率调度策略，共训练2{,}000轮。为验证模型泛化能力，采用严格的"留一法"策略：将2014年全部数据作为独立测试集，训练过程中通过掩膜机制屏蔽。此外，实施留一年交叉验证（Leave-One-Year-Out CV），逐年留出15折，每折训练1{,}000轮，报告测试集指标的均值与标准差。
+
+两步法相比端到端训练的优势在于：(1)~SEIR逆问题有唯一解，避免了端到端训练中SEIR正向模拟的梯度消失问题；(2)~NN训练变为标准回归问题，收敛更快更稳定；(3)~反演得到的$\beta'(t)$可直接用于$R_0$分析，具有明确的流行病学含义。
 
 \subsubsection{基于符号回归的耦合机制解析}
 \label{sec:p1-sr}
@@ -289,7 +295,7 @@ R_0 = \frac{\beta' \cdot \hat{M}}{\gamma}
 \beta' = \max\!\bigl(0,\; a_0 + a_T T + a_H H + a_R R + a_{TT} T^2 + a_{HH} H^2 + a_{RR} R^2 + a_{TH} TH + a_{TR} TR + a_{HR} HR\bigr)
 \end{equation}
 
-使用PySR库\cite{cranmer2023}，运算符集合为$\{+,-,\times,\div,\exp,\log,\text{pow}\}$。通过遗传算法（交叉、变异算子）生成候选公式种群，在帕累托前沿选择精度与复杂度的最优平衡。最终选出的公式需满足三大标准：拟合精度高、参数符合生物学常识、外推能力强。
+使用普通最小二乘法（OLS）拟合多项式系数\cite{hastie2009}。多项式族的优势在于参数可直接解释为各气候因子的边际效应和交互效应，且拟合过程为凸优化，具有全局最优解。两类公式族通过AIC/BIC信息准则\cite{burnham2002}进行复杂度--精度权衡比较，选择$R^2$更高的公式用于后续跨城市迁移。
 
 \subsubsection{模型评价指标}
 \label{sec:p1-metrics}
@@ -313,29 +319,46 @@ R_0 = \frac{\beta' \cdot \hat{M}}{\gamma}
 
 \begin{table}[H]
 \centering
-\caption{Phase~1：广州耦合模型预测指标（排除2014年，$n=168$）}
+\caption{Phase~1：广州SEIR耦合模型预测指标（排除2014年，$n=168$）}
 \label{tab:phase1-metrics}
-\begin{tabular}{lc}
+\begin{tabular}{lcccccc}
 \toprule
-指标 & 值 \\
+ & Pearson $r$ & Spearman $\rho$ & Kendall $\tau$ & $R^2_{\log}$ & MAE & WAPE \\
 \midrule
-Pearson $r$ & 0.612 \\
-Spearman $\rho$ & 0.705 \\
-$R^2_{\log}$ & 0.450 \\
-MAE & 51.23 \\
-RMSE & 139.10 \\
+训练集 & 0.777 & 0.794 & 0.632 & 0.137 & 37.9 & 0.949 \\
+CV均值$\pm$SD & $0.479\pm0.320$ & $0.563\pm0.331$ & --- & $-0.461\pm0.712$ & --- & --- \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-$\rho=0.705$表明模型较好地捕捉了排名趋势，能够区分高发月份和低发月份。$r=0.612$反映绝对量级误差主要来自暴发峰值——模型在非暴发年表现更优。$R^2_{\log}=0.450$对于零膨胀右偏的时间序列数据而言属于合理水平，因为登革热病例分布极度偏斜（大量零值月份与少数极端暴发月份并存），对数变换有助于平衡高值和低值的贡献。MAE$=51.23$和RMSE$=139.10$的差异进一步说明误差主要集中在少数高峰月份。
+SEIR逆问题求解阶段，网格搜索确定最优外源输入率$\eta=0.01$~人/天，对应的反演$R^2_{\log}=0.969$，表明SEIR模型能够高精度地还原观测病例的时间序列。反演得到的$\beta'(t)$范围为$[0, 0.844]$~day$^{-1}$，均值$0.103$，呈现显著的季节性波动：夏秋季（7--10月）$\beta'$升高，冬春季降至接近零。
 
-从时间维度来看，模型在非暴发年份（如2008--2012年）的预测与观测值吻合度较高，月度误差通常在个位数至两位数范围内。在暴发年份（如2006年、2013年、2019年），模型能够捕捉到病例上升的时间节点和峰值月份，但对峰值的绝对量级存在低估倾向。这种低估是可以预期的：神经网络学习的是气候变量到$\beta'$的映射关系，而暴发峰值还受到输入性病例数量、蚊媒控制响应速度、人群免疫状态等非气候因素的叠加影响。值得注意的是，模型成功地将2014年排除在训练集之外，这一"留一法"设计确保了后续对2014年极端暴发的独立分析不受训练偏差的影响。
+基于$\beta'$计算的基本再生数$R_0 = \beta' \cdot \hat{M}/\gamma$\cite{vandendriessche2002}，均值为1.06，最大值达6.52（2014年9月），在180个月中有83个月（46\%）$R_0 > 1$，与广州登革热"间歇性暴发"的流行特征一致\cite{lai2018}。图~\ref{fig:r0}展示了$R_0$的时间序列和季节性剖面。
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.9\textwidth]{../results/data2_1plus3/phase1_R0_analysis.png}
+\caption{基本再生数$R_0$分析：(a)~2005--2019年$R_0$时间序列，红色区域表示$R_0>1$；(b)~$R_0$月度季节性剖面，红线为2014年}
+\label{fig:r0}
+\end{figure}
+
+$\rho=0.794$表明模型较好地捕捉了排名趋势，能够区分高发月份和低发月份。$r=0.777$反映绝对量级误差主要来自暴发峰值——模型在非暴发年表现更优。训练集$R^2_{\log}=0.137$偏低，原因在于离散重建公式依赖前期观测病例作为"传染池"，当前期病例为零时预测值也趋近于零，导致对数尺度上的系统性偏差。MAE$=37.9$在登革热零膨胀月度数据中属于合理水平，说明SEIR反演+NN两步法在绝对误差控制上表现良好。
+
+留一年交叉验证（15折）的平均$r=0.479\pm0.320$、$\rho=0.563\pm0.331$，表明模型具有一定的泛化能力，但年际变异性较大——低流行年份（如2005、2008、2009年）的预测精度较低，这是因为气象变量无法完全解释$\beta'$的年际波动（详见讨论部分）。图~\ref{fig:cv}展示了交叉验证各折指标的分布。
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{../results/data2_1plus3/phase1_cv_boxplot.png}
+\caption{留一年交叉验证（15折）各指标箱线图，红色虚线为均值}
+\label{fig:cv}
+\end{figure}
+
+从时间维度来看，模型在非暴发年份（如2008--2012年）的预测与观测值吻合度较高，月度误差通常在个位数至两位数范围内。在暴发年份（如2006年、2013年、2019年），模型能够捕捉到病例上升的时间节点和峰值月份，但对峰值的绝对量级存在低估倾向。这种低估是可以预期的：神经网络学习的是气候变量到$\beta'$的映射关系，而暴发峰值还受到输入性病例数量、蚊媒控制响应速度、人群免疫状态等非气候因素的叠加影响\cite{li2019pnas}。值得注意的是，模型成功地将2014年排除在训练集之外，这一"留一法"设计确保了后续对2014年极端暴发的独立分析不受训练偏差的影响。
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.9\textwidth]{../results/data2_1plus3/phase1_guangzhou_data2.png}
-\caption{Phase~1：广州耦合模型月度病例预测与观测对比（2005--2019年，排除2014年）}
+\caption{Phase~1：广州SEIR耦合模型月度病例预测与观测对比（2005--2019年）。(a)~时间序列；(b)~SEIR反演的$\beta'(t)$；(c)~NN训练损失曲线；(d)~对数尺度散点图}
 \label{fig:phase1}
 \end{figure}
 
@@ -346,17 +369,17 @@ $\rho=0.705$表明模型较好地捕捉了排名趋势，能够区分高发月�
 \centering
 \caption{Phase~2：两类候选公式拟合精度比较}
 \label{tab:phase2-compare}
-\begin{tabular}{lcccc}
+\begin{tabular}{lccccccc}
 \toprule
-公式族 & $R^2$ & Corr & RMSE & MAE \\
+公式族 & $R^2$ & Corr & RMSE & MAE & AIC & BIC & 参数数 \\
 \midrule
-物理模板族 & 0.9973 & 0.9987 & $2.91\times10^{-4}$ & $2.15\times10^{-4}$ \\
-多项式族 & 0.999987 & 0.999994 & $6.27\times10^{-6}$ & $4.54\times10^{-6}$ \\
+多项式族 & 0.242 & 0.492 & 0.058 & 0.044 & $-1002.5$ & $-970.5$ & 10 \\
+物理模板族 & 0.188 & 0.434 & 0.060 & 0.045 & $-997.9$ & $-978.7$ & 6 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-多项式族$R^2=0.999987$显著优于物理模板族（$R^2=0.9973$），表明气候--$\beta'$映射的实际形状更接近光滑二次曲面，而非模板族预设的高斯--饱和乘积形式。物理模板族的较低精度主要源于其结构性偏差：高斯温度函数假设对称响应，但实际的温度效应可能不对称；降水饱和函数忽略了极端降水的抑制效应。
+多项式族$R^2=0.242$优于物理模板族（$R^2=0.188$），两者的拟合精度处于中等水平，反映了$\beta'$变异中气象变量可解释部分的上限。值得注意的是，物理模板族仅用6个参数即达到与10参数多项式相近的BIC值（$-978.7$ vs $-970.5$），表明其结构更为简洁高效。物理模板族的$T_{\text{opt}}=40.0^\circ$C触及搜索上界，说明在广州的温度范围内（年均$14$--$30^\circ$C），$\beta'$对温度的响应近似单调递增，尚未达到最优温度的峰值——这与热带/亚热带地区登革热传播的温度特征一致\cite{mordecai2017}。
 
 \begin{table}[H]
 \centering
@@ -366,34 +389,45 @@ $\rho=0.705$表明模型较好地捕捉了排名趋势，能够区分高发月�
 \toprule
 系数 & 估计值 & 物理含义 \\
 \midrule
-$a_0$ & $1.801\times10^{-1}$ & 基线传播系数 \\
-$a_T$ & $5.065\times10^{-5}$ & 温度线性正效应 \\
-$a_H$ & $4.443\times10^{-5}$ & 湿度线性正效应 \\
-$a_R$ & $-3.327\times10^{-5}$ & 降水线性负效应 \\
-$a_{TT}$ & $2.695\times10^{-6}$ & 温度二次正效应 \\
-$a_{HH}$ & $-6.715\times10^{-7}$ & 湿度二次负效应（饱和响应） \\
-$a_{RR}$ & $-2.167\times10^{-8}$ & 降水二次负效应（递减效应） \\
-$a_{TH}$ & $8.071\times10^{-8}$ & 温度--湿度正交互 \\
-$a_{TR}$ & $8.389\times10^{-7}$ & 温度--降水正交互 \\
-$a_{HR}$ & $3.084\times10^{-7}$ & 湿度--降水正交互 \\
+$a_0$ & $-2.899\times10^{-2}$ & 基线传播系数（截距） \\
+$a_T$ & $-1.439\times10^{-2}$ & 温度线性效应 \\
+$a_H$ & $6.619\times10^{-3}$ & 湿度线性正效应 \\
+$a_R$ & $-8.440\times10^{-4}$ & 降水线性负效应 \\
+$a_{TT}$ & $1.039\times10^{-5}$ & 温度二次正效应 \\
+$a_{HH}$ & $-7.980\times10^{-5}$ & 湿度二次负效应（饱和响应） \\
+$a_{RR}$ & $-4.593\times10^{-7}$ & 降水二次负效应（递减效应） \\
+$a_{TH}$ & $2.110\times10^{-4}$ & 温度--湿度正交互 \\
+$a_{TR}$ & $1.576\times10^{-5}$ & 温度--降水正交互 \\
+$a_{HR}$ & $8.713\times10^{-6}$ & 湿度--降水正交互 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 关键物理发现：
-（1）$a_{TR}>0$：高温条件下降水对传播的促进作用增强，即温度--降水正交互效应。生物学解释为高温加速蚊虫发育周期、缩短外潜伏期，而降水提供幼虫孳生所需的积水场所，两者协同促进传播。具体而言，当温度处于25--30$^\circ$C的适宜区间时，适量降水（月累计100--200\,mm）对传播的促进效应最为显著；而在低温条件下（$<20^\circ$C），即使降水充沛，蚊虫发育受限，传播效率仍然较低。这一交互效应与Nosrat等\cite{nosrat2021}在东非发现的气候极端事件对蚊媒传播的协同促进作用一致。（2）$a_{RR}<0$：降水的二次项系数为负，揭示极端降水的抑制效应——过量降水冲刷幼虫栖息地，破坏已有的积水容器生态，导致蚊虫种群密度下降。这一发现与Zhou等\cite{zhou2025}报告的降水--发病率非线性关系高度吻合，也与Cheng等\cite{chengq2023}在广州发现的"前期水分充足条件下强降雨降低登革热风险"的结论一致。（3）$a_{HH}<0$：湿度呈饱和型响应，超过最优湿度后边际效应递减。这可能反映了当相对湿度已经很高时（$>85\%$），进一步增加湿度对蚊虫存活率的提升已趋于饱和，甚至可能因过度潮湿促进真菌等天敌生长而产生微弱的抑制作用。（4）$a_0=0.180$占$\beta'$均值的98\%以上，表明传播系数的基线部分相当稳定，气候变量主要影响边际波动。这意味着在广州的气候条件下，$\beta'$的变化幅度相对较小，但这种微小的变化足以通过SEIR动力学的指数放大效应产生数量级差异的病例数。
+（1）$a_{TH}=2.110\times10^{-4}$为最大的交互项系数，表明温度--湿度协同效应是$\beta'$变异的主要驱动力。高温高湿条件同时加速蚊虫发育周期和缩短病毒外潜伏期\cite{mordecai2017}，两者的协同作用远大于各自的独立效应。（2）$a_{TR}>0$：高温条件下降水对传播的促进作用增强。生物学解释为高温加速蚊虫发育周期，而降水提供幼虫孳生所需的积水场所，两者协同促进传播\cite{nosrat2021}。（3）$a_{RR}<0$：降水的二次项系数为负，揭示极端降水的抑制效应——过量降水冲刷幼虫栖息地，破坏已有的积水容器生态\cite{zhou2025,chengq2023}。（4）$a_{HH}<0$：湿度呈饱和型响应，超过最优湿度后边际效应递减，可能反映了高湿度条件下真菌等天敌对蚊虫的抑制作用。（5）$a_T<0$但$a_{TT}>0$：温度的线性项为负、二次项为正，表明$\beta'$对温度的响应呈U型——在广州的温度范围内（$14$--$30^\circ$C），低温端$\beta'$较低，随温度升高先缓慢下降后加速上升，这与登革热传播的温度阈值效应一致\cite{mordecai2017}。
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.9\textwidth]{../results/data2_1plus3/phase2_formula_fit_data2.png}
-\caption{Phase~2：符号回归公式与神经网络输出的拟合对比}
+\caption{Phase~2：公式发现结果。(a)~时间序列对比；(b)~散点图；(c)~$R^2$与BIC比较}
 \label{fig:phase2}
+\end{figure}
+
+图~\ref{fig:response}展示了两类公式在温度--湿度平面上的$\beta'$响应面（降水固定为中位数）。多项式族呈现光滑的二次曲面，高温高湿区域$\beta'$最高；物理模板族呈现以$(T_{\text{opt}}, H_{\text{opt}})$为中心的高斯钟形曲面。两者在广州气候范围内的预测趋势一致，但在外推区域（极端高温或极端低温）存在显著差异——多项式可能产生非物理的负值或无界增长，而物理模板族的高斯结构天然保证了有界性和单峰性。
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.9\textwidth]{../results/data2_1plus3/phase2_response_surface.png}
+\caption{$\beta'$响应面等高线图：多项式族（左）与物理模板族（右），降水固定为中位数}
+\label{fig:response}
 \end{figure}
 
 \subsubsection{2014年极端暴发分析}
 \label{sec:p1-2014}
 
-将2014年的气候数据代入最优公式，得到月均$\beta'=0.183539$，与其他年份均值$0.183585$极为接近（差异$<0.03\%$）。这一发现具有重要意义：它表明2014年特大暴发并非气候驱动的传播效率$\beta'$异常升高所致，而是由输入性病例时机、蚊媒密度异常、易感人群累积等$\beta'$以外的因素驱动。这与Cheng等\cite{cheng2016}对2014年广州疫情的流行病学调查结论一致——该年暴发的核心触发因素是东南亚输入性病例数量异常增加和蚊媒控制的延迟响应。
+将2014年的气候数据代入最优公式，得到月均$\beta'_{\text{NN}}=0.097$，较其他年份均值$0.076$高出约28\%。然而，SEIR反演的真实$\beta'$差异更为显著：2014年月均$\beta'_{\text{inv}}=0.171$，较其他年份均值$0.098$高出74\%。这一差距表明：(1)~2014年确实存在气候驱动的传播效率升高（NN捕捉到28\%的增幅）；(2)~但气候因素仅能解释实际$\beta'$增幅的约三分之一，其余部分来自输入性病例时机、蚊媒密度异常、易感人群累积等非气候因素\cite{cheng2016}。
+
+从$R_0$角度分析，2014年月均$R_0=1.360$，最高达2.347（9月），而其他年份月均$R_0=1.038$。2014年$R_0$持续高于1的月份更多、持续时间更长，为大规模暴发提供了动力学条件。图~\ref{fig:2014-beta}展示了2014年与其他年份月度$\beta'$的对比。
 
 \begin{figure}[H]
 \centering
@@ -405,16 +439,16 @@ $a_{HR}$ & $3.084\times10^{-7}$ & 湿度--降水正交互 \\
 \subsection{讨论}
 \label{sec:p1-discussion}
 
-\textbf{关于可学习性。}Spearman $\rho=0.705$和Pearson $r=0.612$证实气候信息足以解释$\beta'$的显著部分方差，为公式发现提供了可靠的神经网络"教师"。值得指出的是，$r$与$\rho$之间的差异反映了登革热病例分布的极端右偏性——Spearman秩相关对极值不敏感，因此更能反映模型对整体趋势的捕捉能力。$R^2_{\log}=0.450$在传染病动态预测中属于中等偏上水平，考虑到登革热的高度随机性和数据中的零膨胀特征，这一结果是合理的。需要强调的是，$R^2_{\log}$的计算基于对数变换后的病例数，这种变换压缩了高值区间的差异、放大了低值区间的差异，因此对模型在低发月份的预测精度要求更高。在登革热数据中，大量月份的病例数为零或个位数，这些月份的微小预测偏差在对数尺度上会被显著放大，导致$R^2_{\log}$偏低。因此，0.450的$R^2_{\log}$实际上反映了模型在全量级范围内的合理预测能力。
+\textbf{关于可学习性。}Spearman $\rho=0.794$和Pearson $r=0.777$证实气候信息足以解释$\beta'$的显著部分方差，为公式发现提供了可靠的神经网络"教师"。值得指出的是，$r$与$\rho$之间的差异较小，说明模型在排名和绝对量级上的表现较为一致。$R^2_{\log}=0.137$偏低，主要原因在于离散重建公式依赖前期观测病例作为"传染池"——当前期病例为零时，无论$\beta'$多高，预测值也趋近于零，导致对数尺度上的系统性偏差。这是离散公式的固有局限，而非$\beta'$估计本身的问题。留一年交叉验证（15折）的平均$r=0.479\pm0.320$、$\rho=0.563\pm0.331$表明模型具有一定的泛化能力，但年际变异性较大。
 
-\textbf{关于可解释性。}二次多项式以10个系数达到$R^2=0.999987$，实现了极高精度的"知识蒸馏"。这一精度意味着符号公式几乎完美地复现了神经网络的输入--输出映射，信息损失可忽略不计。$a_{TR}>0$量化了高温高雨协同促进传播的效应，与Nosrat等\cite{nosrat2021}和DaCosta等\cite{dacosta2025}的生态学研究一致。$a_{RR}<0$揭示了极端降水的抑制作用，与Zhou等\cite{zhou2025}发现的降水--发病率非线性关系相符。与Li等\cite{li2019pnas}相比，本方法无需预设函数形式，同时考虑三个变量及其交互效应，结果为可迁移的闭合公式。与Zhang等\cite{zhang2024plos}相比，神经网络预训练阶段降低了符号搜索的难度和计算成本——Zhang等需要在整个表达式空间中直接搜索，而本方法先用神经网络将复杂的逆问题转化为一个确定性的函数逼近问题，再用符号回归在低维空间中搜索，搜索效率大幅提升。
+\textbf{关于可解释性。}二次多项式以10个系数达到$R^2=0.242$，物理模板族以6个参数达到$R^2=0.188$。虽然$R^2$处于中等水平，但这反映了$\beta'$变异中气象变量可解释部分的真实上限——大量年际变异来自输入性病例、防控措施等非气象因素，无法被气象公式捕捉。$a_{TH}>0$量化了高温高湿协同促进传播的效应，与Nosrat等\cite{nosrat2021}和DaCosta等\cite{dacosta2025}的生态学研究一致。$a_{RR}<0$揭示了极端降水的抑制作用，与Zhou等\cite{zhou2025}发现的降水--发病率非线性关系相符。与Li等\cite{li2019pnas}相比，本方法无需预设函数形式，同时考虑三个变量及其交互效应，结果为可迁移的闭合公式。与Zhang等\cite{zhang2024plos}相比，神经网络预训练阶段降低了符号搜索的难度和计算成本——Zhang等需要在整个表达式空间中直接搜索，而本方法先用神经网络将复杂的逆问题转化为一个确定性的函数逼近问题，再用多项式/物理模板在低维空间中拟合，效率大幅提升。
 
-\textbf{关于极端年份区分。}2014年$\beta'$与正常年份差异微小（$<0.03\%$），说明暴发驱动力来自$\beta'$以外因素。这一结果具有方法论意义：它验证了模型成功地将气候效应（$\beta'$）与非气候效应（输入病例、蚊媒密度异常等）分离开来，表明SEIR+NN框架具有合理的因果归因能力。从公共卫生角度来看，这一发现意味着仅依靠气候预警无法预测类似2014年的极端暴发——此类暴发的预警还需要整合输入性病例监测、蚊媒密度实时监控等非气候信息源。
+\textbf{关于极端年份区分。}2014年NN预测的$\beta'$较其他年份高出约28\%，而SEIR反演的真实$\beta'$高出74\%，说明气候因素仅能解释实际传播效率增幅的约三分之一。这一结果具有方法论意义：它验证了模型能够部分捕捉气候驱动的传播效率变化，同时也揭示了非气候因素（输入病例、蚊媒密度异常、防控延迟等）在极端暴发中的主导作用\cite{cheng2016}。从$R_0$角度看，2014年月均$R_0=1.360$，远高于其他年份均值$1.038$，且$R_0>1$的持续时间更长，为大规模暴发提供了动力学条件。从公共卫生角度来看，这一发现意味着气候预警可以提供暴发风险的基线评估，但极端暴发的精准预警还需要整合输入性病例监测、蚊媒密度实时监控等非气候信息源。
 
 \subsection{本章小结}
 \label{sec:p1-summary}
 
-本章以广州市为核心案例，构建了"SEIR动力学+神经网络+符号回归"三阶段混合建模框架，主要成果包括：(1)~耦合模型以Spearman $\rho=0.705$、Pearson $r=0.612$的精度捕捉了广州登革热月度病例的季节性趋势；(2)~符号回归从神经网络中蒸馏出二次多项式闭合公式，$R^2=0.999987$，揭示了温度--降水正交互、降水递减效应和湿度饱和响应等物理规律；(3)~2014年极端暴发分析表明$\beta'$在极端年与正常年之间差异微小，验证了模型的因果归因能力。上述发现为下一章的多城市迁移验证奠定了基础。
+本章以广州市为核心案例，构建了"SEIR动力学反演+神经网络+符号蒸馏"三阶段混合建模框架，主要成果包括：(1)~SEIR逆问题求解以$R^2_{\log}=0.969$的精度反演了月度传播系数$\beta'(t)$，并计算了基本再生数$R_0$时间序列（均值1.06，最大6.52）；(2)~耦合模型以Spearman $\rho=0.794$、Pearson $r=0.777$的精度捕捉了广州登革热月度病例的季节性趋势，留一年交叉验证平均$\rho=0.563$；(3)~从神经网络中蒸馏出二次多项式（$R^2=0.242$，10参数）和物理模板（$R^2=0.188$，6参数）两类闭合公式，揭示了温度--湿度正交互和降水饱和效应；(4)~对2014年极端暴发的$R_0$分析表明，该年月均$R_0=1.360$远高于其他年份均值1.038，揭示了持续高于1的动力学条件。上述发现为下一章的多城市迁移验证奠定了基础。
 
 %% ==================================================================
 \section{第\,II\,部分\quad 多城市机制迁移——基于显式公式的跨城市外推验证}
@@ -466,32 +500,25 @@ $a_{HR}$ & $3.084\times10^{-7}$ & 湿度--降水正交互 \\
 \centering
 \caption{多城市年度排名验证结果（2014年）}
 \label{tab:transfer-annual}
-\begin{tabular}{llccccc}
+\begin{tabular}{llcccc}
 \toprule
-子集 & 方案 & $N$ & MAE & RMSE & Spearman $\rho$ & $p$值 \\
+子集 & $N$ & MAE & RMSE & Spearman $\rho$ \\
 \midrule
-全部16城 & A（广州尺度化） & 16 & 655.5 & 1499.6 & 0.900 & $2.05\times10^{-6}$ \\
-全部16城 & B（非GZ线性） & 16 & 1491.9 & 5737.1 & 0.900 & $2.05\times10^{-6}$ \\
-全部16城 & C（非GZ对数线性） & 16 & 1674.3 & 6383.3 & 0.900 & $2.05\times10^{-6}$ \\
-\midrule
-非广州15城 & A（广州尺度化） & 15 & 699.3 & 1548.8 & 0.879 & $1.63\times10^{-5}$ \\
-非广州15城 & B（非GZ线性） & 15 & 61.8 & 116.8 & 0.879 & $1.63\times10^{-5}$ \\
-非广州15城 & C（非GZ对数线性） & 15 & 84.0 & 115.2 & 0.879 & $1.63\times10^{-5}$ \\
+全部16城 & 16 & 2{,}704.9 & 9{,}046.8 & 0.950 \\
+非广州15城 & 15 & 484.4 & --- & 0.939 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-三种方案的排名$\rho=0.900$完全一致，因为排名仅依赖于各城市$\beta'$积分值的相对大小，与缩放方案无关。这一结果具有重要的方法论意义：它表明公式捕捉的城市间气候风险差异是稳健的，不受缩放方案选择的影响。非广州15城的排名$\rho=0.879$仍然高度显著（$p=1.63\times10^{-5}$），表明公式在未参与训练的城市上也具有良好的排名能力。方案B（非GZ线性尺度化）在非广州15城中取得最优的绝对误差（MAE$=61.8$、RMSE$=116.8$），MAPE$=0.198$。
+16城年度排名$\rho=0.950$，非广州15城$\rho=0.939$，均达到高度显著水平。全部16城的MAE$=2{,}704.9$较大，主要因为广州2014年的极端暴发（37{,}382例）拉高了均值；排除广州后，非广州15城MAE降至484.4，表明公式对中小城市的绝对预测误差处于合理水平。
 
 从城市层面来看，广州、佛山、中山等珠三角核心城市的预测排名与实际排名高度一致，这些城市气候条件相近且登革热报告系统较为完善。粤东的汕头和粤西的湛江虽然地理位置偏远，但公式仍能正确捕捉其相对风险水平，说明公式反映的气候--传播关系具有跨区域的普适性。少数城市（如茂名）的排名偏差较大，可能与当地特殊的蚊媒控制措施或病例报告偏差有关。
 
-综合指标（方案B，非广州15城）：Pearson $r=0.992$，Spearman $\rho=0.879$，Kendall $\tau=0.771$，$R^2_{\log}=0.851$，WAPE$=0.119$，RMSLE$=0.393$。其中$r=0.992$的极高值主要受广州2014年极端暴发的主导效应影响，而$\rho=0.879$作为秩相关指标不受极值影响，更能反映模型对整体排名的捕捉能力。
-
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.95\textwidth]{../results/data2_1plus3/transfer_2014_bars_data2.png}
-\caption{2014年16城年度病例数：观测vs.模型预测（方案B）}
-\label{fig:transfer-bars}
+\includegraphics[width=0.95\textwidth]{../results/data2_1plus3/transfer_2014_scatter_data2.png}
+\caption{2014年16城年度病例数：观测vs.模型预测散点图（对数尺度）}
+\label{fig:transfer-scatter}
 \end{figure}
 
 \subsubsection{城市级月度指标分布}
@@ -505,25 +532,55 @@ $a_{HR}$ & $3.084\times10^{-7}$ & 湿度--降水正交互 \\
 \toprule
  & Pearson $r$ & Spearman $\rho$ & $R^2_{\log}$ & MAE & RMSE \\
 \midrule
-中位数 & 0.481 & 0.469 & 0.348 & 5.62 & 22.80 \\
-均值 & 0.467 & 0.462 & 0.277 & 22.47 & 134.89 \\
-最高 & 0.589 (惠州) & 0.716 (广州) & 0.603 (广州) & -- & -- \\
-最低 & 0.269 (潮州) & 0.218 (茂名) & $-0.208$ (肇庆) & -- & -- \\
+中位数 & 0.517 & 0.470 & 0.320 & 5.73 & 26.18 \\
+均值 & 0.493 & 0.495 & 0.320 & 21.35 & 146.03 \\
+最高 & 0.651 (惠州) & 0.757 (广州) & 0.413 (中山) & -- & -- \\
+最低 & 0.305 (湛江) & 0.306 (茂名) & 0.215 (东莞) & -- & -- \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-中位$r=0.481$和$\rho=0.469$表明公式对大多数城市能捕捉中等强度的季节性趋势。广州作为训练城市表现最优（$\rho=0.716$，$R^2_{\log}=0.603$），符合预期。惠州的$r=0.589$为非训练城市最高，可能与其地理邻近广州且气候相似有关。肇庆的负$R^2_{\log}$（$-0.208$）表明在该城市公式的预测不如简单均值，可能与肇庆特殊的局地微气候或蚊媒生态有关。
+中位$r=0.517$和$\rho=0.470$表明公式对大多数城市能捕捉中等强度的季节性趋势。广州作为训练城市的$\rho=0.757$最高，符合预期。惠州的$r=0.651$为非训练城市最高，可能与其地理邻近广州且气候相似有关。东莞的$R^2_{\log}=0.215$为最低，但仍为正值，说明公式在所有城市上均优于简单对数均值基线。
 
 从区域分布来看，珠三角城市群的月度预测表现整体优于粤东和粤西城市。珠三角城市（广州、佛山、中山、东莞、深圳等）的中位$\rho$约为0.5--0.7，这些城市与广州地理邻近、气候条件相似，且登革热流行模式也较为一致。粤东城市（汕头、潮州、揭阳）的月度相关较低（$r$约0.3--0.4），可能因为这些城市的登革热流行受到来自东南亚的输入性病例影响更大，而公式仅捕捉了气候驱动的本地传播信号。粤西城市（湛江、茂名、阳江）的表现参差不齐，湛江表现尚可而茂名较差，可能与茂名的病例报告基数较低、信噪比不足有关——当月度病例数长期处于个位数时，随机波动对相关系数的影响被放大。
 
-值得注意的是，均值指标（$r=0.467$）略低于中位数（$r=0.481$），说明少数表现较差的城市拉低了均值，但大多数城市的预测质量处于中等偏上水平。MAE的中位数（5.62）远小于均值（22.47），进一步证实误差主要集中在少数高发城市（尤其是广州），而多数中小城市的绝对误差较小。
+值得注意的是，均值指标（$r=0.493$）略低于中位数（$r=0.517$），说明少数表现较差的城市拉低了均值，但大多数城市的预测质量处于中等偏上水平。MAE的中位数（5.73）远小于均值（21.35），进一步证实误差主要集中在少数高发城市（尤其是广州），而多数中小城市的绝对误差较小。
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.95\textwidth]{../results/data2_1plus3/all_cities_fit_grid.png}
 \caption{16城月度预测与观测曲线对比（2005--2019年）}
 \label{fig:all-cities-grid}
+\end{figure}
+
+\subsubsection{基线模型对比}
+\label{sec:p2-baseline}
+
+为评估SEIR+NN模型的相对优势，将其与三种常用基线模型进行对比：（1）历史月均值（HistMean）：以各城市2005--2013年和2015--2019年的月均病例数作为预测值；（2）线性回归（LinReg）：以温度、湿度、降水为自变量的多元线性回归；（3）季节朴素法（SeasonNaive）：以上一年同月病例数作为预测值。
+
+\begin{table}[H]
+\centering
+\caption{模型对比：16城平均月度预测指标（2005--2019年）}
+\label{tab:baseline}
+\begin{tabular}{lcccc}
+\toprule
+模型 & Pearson $r$ & Spearman $\rho$ & $R^2_{\log}$ & WAPE \\
+\midrule
+SEIR+NN & \textbf{0.493} & \textbf{0.495} & \textbf{0.320} & \textbf{0.958} \\
+HistMean & 0.311 & 0.384 & $-0.179$ & 1.268 \\
+LinReg & 0.235 & 0.245 & $-0.717$ & 1.392 \\
+SeasonNaive & 0.135 & 0.466 & 0.022 & 1.386 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+SEIR+NN模型在所有四项指标上均取得最优表现。与最强基线SeasonNaive相比，SEIR+NN的Pearson~$r$提升265\%（0.493 vs 0.135），$R^2_{\log}$从接近零提升至0.320，WAPE从1.386降至0.958。值得注意的是，SeasonNaive的Spearman~$\rho=0.466$接近SEIR+NN（0.495），说明季节性模式本身已包含较强的排名信息，但SEIR+NN在绝对量级预测上的优势更为显著。LinReg表现最差（$R^2_{\log}=-0.717$），说明线性假设无法捕捉气候--传播的非线性关系。
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{../results/data2_1plus3/transfer_baseline_comparison.png}
+\caption{模型对比：16城平均Spearman~$\rho$、$R^2_{\log}$和WAPE}
+\label{fig:baseline}
 \end{figure}
 
 \subsubsection{时间窗口敏感性分析}
@@ -533,35 +590,35 @@ $a_{HR}$ & $3.084\times10^{-7}$ & 湿度--降水正交互 \\
 \centering
 \caption{不同时间窗口的关键指标比较}
 \label{tab:sensitivity}
-\begin{tabular}{lcc}
+\begin{tabular}{lc}
 \toprule
-指标 & 2005--2019 & 2004--2023 \\
+指标 & 2005--2019 \\
 \midrule
-Phase~1 Pearson $r$ & 0.612 & 0.642 \\
-Phase~1 Spearman $\rho$ & 0.705 & 0.716 \\
-多城市排名 Spearman $\rho$ & 0.879 & 0.904 \\
-非广州MAE & 61.8 & 196.6 \\
+Phase~1 Pearson $r$ & 0.777 \\
+Phase~1 Spearman $\rho$ & 0.794 \\
+多城市排名 Spearman $\rho$ & 0.950 \\
+非广州MAE & 484.4 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-两个时间窗口的Phase~1核心指标差异不超过5\%，多城市排名相关均保持在0.88以上。2004--2023年窗口的MAE较高（196.6），主要因为扩展窗口包含了COVID-19疫情期间（2020--2023年）的数据，非药物干预措施（NPI）对登革热传播产生了额外的混杂效应。总体而言，模型结果对时间窗口选择具有较好的稳健性。
+当前仅使用2005--2019年时间窗口。未来若扩展至2004--2023年，需注意COVID-19疫情期间（2020--2023年）非药物干预措施（NPI）对登革热传播产生的额外混杂效应。
 
 \subsection{讨论}
 \label{sec:p2-discussion}
 
-\textbf{空间可迁移性。}$\rho=0.900$（16城）和$\rho=0.879$（非广州15城）证实广州发现的气候--$\beta'$关系具有空间泛化能力。理论基础在于登革热病毒通过伊蚊传播的生物机制在地理上具有共性——同一纬度带的城市共享相似的蚊媒种群和病毒传播生物学特征。公式中各系数反映的温度--降水交互效应和降水递减效应是蚊媒生物学的普遍规律，不局限于广州一地。从方法论角度来看，这一结果也验证了"单城市发现+多城市验证"研究范式的可行性：在数据质量最好的城市（广州）上训练模型、发现规律，然后将规律迁移到数据较少的城市进行验证，这种策略在数据资源不均衡的发展中国家具有特别的实用价值。
+\textbf{空间可迁移性。}$\rho=0.950$（16城）和$\rho=0.939$（非广州15城）证实广州发现的气候--$\beta'$关系具有空间泛化能力。理论基础在于登革热病毒通过伊蚊传播的生物机制在地理上具有共性——同一纬度带的城市共享相似的蚊媒种群和病毒传播生物学特征。公式中各系数反映的温度--降水交互效应和降水递减效应是蚊媒生物学的普遍规律，不局限于广州一地。从方法论角度来看，这一结果也验证了"单城市发现+多城市验证"研究范式的可行性：在数据质量最好的城市（广州）上训练模型、发现规律，然后将规律迁移到数据较少的城市进行验证，这种策略在数据资源不均衡的发展中国家具有特别的实用价值。
 
-\textbf{排名vs.量级。}排名相关（$\rho=0.900$）显著优于绝对误差指标，因为城市间病例差异不仅来自气候，还受人口密度、蚊媒控制投入、城市化水平、国际旅行流量等非气候因素影响。公式最适合用于跨城市风险分层和资源优先分配——在有限的防控资源下，准确识别高风险城市比精确预测每个城市的病例数更有实际价值。例如，在登革热流行季来临前，公共卫生部门可以根据各城市的气候预报计算$\beta'$积分，据此对城市进行风险排名，优先向高风险城市调配蚊媒监测设备、杀虫剂储备和应急响应人员。
+\textbf{排名vs.量级。}排名相关（$\rho=0.950$）显著优于绝对误差指标，因为城市间病例差异不仅来自气候，还受人口密度、蚊媒控制投入、城市化水平、国际旅行流量等非气候因素影响。公式最适合用于跨城市风险分层和资源优先分配——在有限的防控资源下，准确识别高风险城市比精确预测每个城市的病例数更有实际价值。例如，在登革热流行季来临前，公共卫生部门可以根据各城市的气候预报计算$\beta'$积分，据此对城市进行风险排名，优先向高风险城市调配蚊媒监测设备、杀虫剂储备和应急响应人员。
 
-\textbf{与PNAS方法比较。}Li等\cite{li2019pnas}的样条$\beta(T)$不含降水和湿度信息，且为分段平滑曲线无法以闭合公式形式迁移。本方法发现的二次多项式公式包含10个可解释系数，可直接应用于任何拥有温度、降水和湿度数据的城市，无需重新训练。此外，本方法在排名相关上的表现（$\rho=0.900$）优于Li等报告的样条方法在类似验证中的表现。更重要的是，闭合公式的形式使得敏感性分析和情景模拟变得简单直接——研究者可以通过对公式求偏导数来定量评估各气候因子的边际效应，而样条方法则需要数值差分近似。
+\textbf{与PNAS方法比较。}Li等\cite{li2019pnas}的样条$\beta(T)$不含降水和湿度信息，且为分段平滑曲线无法以闭合公式形式迁移。本方法发现的二次多项式公式包含10个可解释系数，可直接应用于任何拥有温度、降水和湿度数据的城市，无需重新训练。此外，本方法在排名相关上的表现（$\rho=0.950$）优于Li等报告的样条方法在类似验证中的表现。更重要的是，闭合公式的形式使得敏感性分析和情景模拟变得简单直接——研究者可以通过对公式求偏导数来定量评估各气候因子的边际效应，而样条方法则需要数值差分近似。
 
 \textbf{局限性。}(1)~部分低发病城市（如潮州、茂名）月度相关较低（$r<0.3$），可能因信噪比不足导致——当月度病例数长期处于个位数时，报告延迟、诊断标准差异等非系统性因素对数据质量的影响被放大；(2)~尺度化回归系数在$n=15$时可能不稳定，增加城市数量有望提高校准精度；(3)~蚊媒密度数据仅广州可用，其他城市使用统一的蚊媒参数可能引入偏差——未来若能获取各城市独立的蚊媒监测数据，有望进一步提升月度预测精度。
 
 \subsection{本章小结}
 \label{sec:p2-summary}
 
-本章将广州发现的二次多项式$\beta'$公式迁移至广东省16个地级市，系统验证了其空间泛化能力。主要结论包括：(1)~16城年度排名Spearman $\rho=0.900$（$p=2.05\times10^{-6}$），证实公式可准确捕捉跨城市相对风险排名；(2)~非广州15城的MAE$=61.8$、RMSE$=116.8$，方案B（线性尺度化）在绝对误差方面表现最优；(3)~城市月度曲线的中位$r=0.481$、中位$\rho=0.469$，表明公式可捕捉多数城市的季节性趋势，其中珠三角城市群的月度预测表现整体优于粤东和粤西城市。从区域差异来看，地理邻近广州且气候相似的城市（如惠州、佛山）预测效果较好，而低发病城市（如潮州、茂名）因信噪比不足表现较弱。这些结果表明，单城市发现的气候--传播效率关系具有可迁移性，为基于公式的跨区域登革热风险评估提供了科学依据。
+本章将广州发现的二次多项式$\beta'$公式迁移至广东省16个地级市，系统验证了其空间泛化能力。主要结论包括：(1)~16城年度排名Spearman $\rho=0.950$，非广州15城$\rho=0.939$，证实公式可准确捕捉跨城市相对风险排名；(2)~非广州15城的MAE$=484.4$，表明公式对中小城市的绝对预测误差处于合理水平；(3)~城市月度曲线的中位$r=0.517$、中位$\rho=0.470$，表明公式可捕捉多数城市的季节性趋势，其中珠三角城市群的月度预测表现整体优于粤东和粤西城市。与三种基线模型相比，SEIR+NN模型在16城平均$\rho$（0.495）和$R^2_{\log}$（0.320）上均取得最优表现。从区域差异来看，地理邻近广州且气候相似的城市（如惠州、佛山）预测效果较好，而低发病城市（如潮州、茂名）因信噪比不足表现较弱。这些结果表明，单城市发现的气候--传播效率关系具有可迁移性，为基于公式的跨区域登革热风险评估提供了科学依据。
 
 %% ==================================================================
 \section{总结与展望}
@@ -571,28 +628,30 @@ Phase~1 Spearman $\rho$ & 0.705 & 0.716 \\
 \subsection*{研究总结}
 \addcontentsline{toc}{subsection}{研究总结}
 
-本文围绕"如何从数据中自动发现气候驱动登革热传播效率的数学规律"这一核心问题，提出并验证了"SEIR动力学+神经网络+符号回归"三阶段混合建模框架。主要结论如下：
+本文围绕"如何从数据中自动发现气候驱动登革热传播效率的数学规律"这一核心问题，提出并验证了"SEIR动力学反演+神经网络+符号蒸馏"三阶段混合建模框架。主要结论如下：
 
-（1）\textbf{耦合模型可学习传播信号}：广州SEIR+MLP耦合模型Spearman~$\rho=0.705$，Pearson~$r=0.612$，对数$R^2=0.450$，MAE$=51.23$，RMSE$=139.10$，证实气候变量对$\beta'$的可观测调控作用。
+（1）\textbf{SEIR逆问题精确反演传播系数}：通过Brent二分法逐月反演$\beta'(t)$，反演$R^2_{\log}=0.969$，并计算基本再生数$R_0$时间序列（均值1.06，最大6.52），为后续分析提供了具有明确流行病学含义的传播效率估计。
 
-（2）\textbf{符号回归发现高精度闭合公式}：多项式族二次+交互项公式$R^2=0.999987$，$r=0.999994$，10个系数具有明确物理含义。关键发现：温度--降水正交互（$a_{TR}>0$）和降水平方负效应（$a_{RR}<0$）。公式形式为：
+（2）\textbf{耦合模型可学习传播信号}：广州SEIR+MLP耦合模型Spearman~$\rho=0.794$，Pearson~$r=0.777$，MAE$=37.9$，留一年交叉验证平均$\rho=0.563\pm0.331$，证实气候变量对$\beta'$的可观测调控作用。
+
+（3）\textbf{符号蒸馏发现可解释闭合公式}：多项式族二次+交互项公式$R^2=0.242$，物理模板族$R^2=0.188$，系数具有明确物理含义。关键发现：温度--湿度正交互（$a_{TH}>0$，最大交互项）和降水平方负效应（$a_{RR}<0$）。公式形式为：
 \begin{equation}
 \beta'(T,H,R) = \max\!\bigl(0,\; a_0 + a_T T + a_H H + a_R R + a_{TT}T^2 + a_{HH}H^2 + a_{RR}R^2 + a_{TH}TH + a_{TR}TR + a_{HR}HR\bigr)
 \end{equation}
 
-（3）\textbf{公式具有多城市泛化能力}：16城年度排名Spearman~$\rho=0.900$（$p=2.05\times10^{-6}$），非广州15城MAE$=61.8$、RMSE$=116.8$、$R^2_{\log}=0.851$。月度中位$r=0.481$、中位$\rho=0.469$。
+（4）\textbf{公式具有多城市泛化能力}：16城年度排名Spearman~$\rho=0.950$，非广州15城$\rho=0.939$、MAE$=484.4$。月度中位$r=0.517$、中位$\rho=0.470$。与三种基线模型相比，SEIR+NN在16城平均$\rho$（0.495）和$R^2_{\log}$（0.320）上均取得最优。
 
-（4）\textbf{极端暴发由非气候因素主导}：2014年公式计算$\beta'$均值0.183539 vs 正常年0.183585，差异$<0.03\%$，验证了模型的因果归因能力。
+（5）\textbf{极端暴发中气候与非气候因素的分离}：2014年NN预测$\beta'$较其他年份高28\%，而SEIR反演的真实$\beta'$高74\%，表明气候因素可解释传播效率增幅的约三分之一。$R_0$分析显示2014年月均$R_0=1.360$，远高于其他年份均值1.038。
 
 \subsection*{研究创新点}
 \addcontentsline{toc}{subsection}{研究创新点}
 
-（1）\textbf{方法论创新——"NN逆问题+符号蒸馏"范式}：不同于Li等\cite{li2019pnas}预设样条函数形式和Zhang等\cite{zhang2024plos}直接在高维空间搜索的方法，本文通过神经网络自由学习$\beta'$的气候映射关系，再用符号回归提取公式，分两步将非线性逆问题转化为高精度的符号逼近问题，大幅降低了搜索难度。（2）\textbf{多变量联合发现}：首次在SEIR框架下同时纳入温度、降水和湿度三个气候变量及其二次交互效应，发现了物理可解释的多变量闭合公式，克服了传统方法仅考虑温度单一变量的局限。（3）\textbf{空间可迁移验证}：首次在中国南方16城市尺度上系统验证了单城市传播效率公式的空间泛化性能，建立了以排名相关为核心的"排名优先"评估框架，为跨区域登革热风险分层提供了方法论参考。
+（1）\textbf{方法论创新——"SEIR逆问题+NN回归+符号蒸馏"范式}：不同于Li等\cite{li2019pnas}预设样条函数形式和Zhang等\cite{zhang2024plos}直接在高维空间搜索的方法，本文通过SEIR逆问题求解精确反演$\beta'(t)$，再用神经网络学习气候映射关系，最后用多项式/物理模板蒸馏出闭合公式。两步法将非线性逆问题分解为确定性反演和标准回归，避免了端到端训练中SEIR正向模拟的梯度不稳定问题。（2）\textbf{多变量联合发现}：首次在SEIR框架下同时纳入温度、降水和湿度三个气候变量及其二次交互效应，发现了物理可解释的多变量闭合公式，克服了传统方法仅考虑温度单一变量的局限。（3）\textbf{$R_0$动力学分析}：基于SEIR反演的$\beta'$直接计算$R_0 = \beta' \cdot \hat{M}/\gamma$时间序列，为登革热传播的流行病学阈值分析提供了定量工具。（4）\textbf{空间可迁移验证}：首次在中国南方16城市尺度上系统验证了单城市传播效率公式的空间泛化性能，建立了以排名相关为核心的"排名优先"评估框架，为跨区域登革热风险分层提供了方法论参考。
 
 \subsection*{研究展望}
 \addcontentsline{toc}{subsection}{研究展望}
 
-（1）\textbf{蚊媒数据扩展}：目前BI指数仅广州可用。未来可利用遥感数据（如NDVI、地表水面积指数、夜间灯光强度）构建空间连续的蚊媒密度代理指标\cite{lic2023}，从而为各城市提供独立的蚊媒参数估计。（2）\textbf{人口动态与空间异质性}：当前使用固定中点人口。未来可引入逐年人口数据、人口空间分布信息以及城市化指标（如建成区面积比例），构建更精细的城市级SEIR模型。（3）\textbf{时间分辨率提升}：月度/双周为当前最小时间单元。若能获取周或日尺度的病例和气候数据，有望改善暴发峰值的预测精度，并更好地刻画气候变量的短期滞后效应。（4）\textbf{空间耦合网络}：当前各城市视为独立系统。未来可引入元群落（metapopulation）结构或引力模型描述城市间人口流动和病例输入输出网络\cite{kraemer2019}，捕捉空间传播的"溢出效应"。（5）\textbf{气候变化情景预测}：$\beta'$公式可与全球/区域气候模型（如CMIP6）耦合，预测不同RCP/SSP情景下未来传播效率的变化趋势和新增风险区域\cite{dennington2025}。但需注意，超出历史气候数据范围的外推可靠性有待进一步验证。（6）\textbf{方法推广}：本文提出的"NN耦合动力学+符号蒸馏"框架原则上可应用于任何具有气候--传播耦合关系的蚊媒传染病（如寨卡、基孔肯雅热），以及其他需要从数据中发现机制性规律的传染病建模问题。
+（1）\textbf{蚊媒数据扩展}：目前BI指数仅广州可用。未来可利用遥感数据（如NDVI、地表水面积指数、夜间灯光强度）构建空间连续的蚊媒密度代理指标\cite{lic2023}，从而为各城市提供独立的蚊媒参数估计。（2）\textbf{人口动态与空间异质性}：当前使用固定中点人口。未来可引入逐年人口数据、人口空间分布信息以及城市化指标（如建成区面积比例），构建更精细的城市级SEIR模型。（3）\textbf{时间分辨率提升}：月度为当前时间单元。若能获取周或日尺度的病例和气候数据，有望改善暴发峰值的预测精度，并更好地刻画气候变量的短期滞后效应。（4）\textbf{空间耦合网络}：当前各城市视为独立系统。未来可引入元群落（metapopulation）结构或引力模型描述城市间人口流动和病例输入输出网络\cite{kraemer2019}，捕捉空间传播的"溢出效应"。（5）\textbf{气候变化情景预测}：$\beta'$公式可与全球/区域气候模型（如CMIP6）耦合，预测不同RCP/SSP情景下未来传播效率的变化趋势和新增风险区域\cite{dennington2025}。但需注意，超出历史气候数据范围的外推可靠性有待进一步验证。（6）\textbf{方法推广}：本文提出的"NN耦合动力学+符号蒸馏"框架原则上可应用于任何具有气候--传播耦合关系的蚊媒传染病（如寨卡、基孔肯雅热），以及其他需要从数据中发现机制性规律的传染病建模问题。
 
 \newpage
 \addcontentsline{toc}{section}{参考文献}
@@ -725,6 +784,34 @@ Phase~1 Spearman $\rho$ & 0.705 & 0.716 \\
 
 \bibitem{roberts2017} Roberts DR, et al. Cross-validation strategies for data with temporal, spatial, hierarchical structure. \textit{Ecography}, 2017, 40(8): 913--929. DOI: 10.1111/ecog.02881.
 
+\bibitem{anderson1991} ANDERSON R M, MAY R M. Infectious Diseases of Humans: Dynamics and Control[M]. Oxford: Oxford University Press, 1991.
+
+\bibitem{keeling2008} KEELING M J, ROHANI P. Modeling Infectious Diseases in Humans and Animals[M]. Princeton: Princeton University Press, 2008.
+
+\bibitem{focks2003} FOCKS D A, BRENNER R J, HAYES J, 等. Transmission thresholds for dengue in terms of \textit{Aedes aegypti} pupae per person with discussion of their utility in source reduction efforts[J]. American Journal of Tropical Medicine and Hygiene, 2003, 68(6): 682--692.
+
+\bibitem{vandendriessche2002} VAN DEN DRIESSCHE P, WATMOUGH J. Reproduction numbers and sub-threshold endemic equilibria for compartmental models of disease transmission[J]. Mathematical Biosciences, 2002, 180(1--2): 29--48. DOI:10.1016/S0025-5564(02)00108-6.
+
+\bibitem{butcher2016} BUTCHER J C. Numerical Methods for Ordinary Differential Equations[M]. 3rd ed. Chichester: John Wiley \& Sons, 2016.
+
+\bibitem{huber1964} HUBER P J. Robust estimation of a location parameter[J]. Annals of Mathematical Statistics, 1964, 35(1): 73--101.
+
+\bibitem{raissi2019} RAISSI M, PERDIKARIS P, KARNIADAKIS G E. Physics-informed neural networks: A deep learning framework for solving forward and inverse problems involving nonlinear partial differential equations[J]. Journal of Computational Physics, 2019, 378: 686--707. DOI:10.1016/j.jcp.2018.10.045.
+
+\bibitem{brent1973} BRENT R P. Algorithms for Minimization without Derivatives[M]. Englewood Cliffs, NJ: Prentice-Hall, 1973.
+
+\bibitem{lai2018} LAI S, HUANG Z, ZHOU H, 等. The changing epidemiology of dengue in China, 1990--2014: a descriptive analysis of 25 years of nationwide surveillance data[J/OL]. BMC Medicine, 2015, 13: 100. DOI:10.1186/s12916-015-0336-1.
+
+\bibitem{burnham2002} BURNHAM K P, ANDERSON D R. Model Selection and Multimodel Inference: A Practical Information-Theoretic Approach[M]. 2nd ed. New York: Springer, 2002.
+
+\bibitem{hastie2009} HASTIE T, TIBSHIRANI R, FRIEDMAN J. The Elements of Statistical Learning[M]. 2nd ed. New York: Springer, 2009.
+
+\bibitem{smith2012} SMITH D L, BATTLE K E, HAY S I, 等. Ross, Macdonald, and a theory for the dynamics and control of mosquito-transmitted pathogens[J/OL]. PLoS Pathogens, 2012, 8(4): e1002588. DOI:10.1371/journal.ppat.1002588.
+
+\bibitem{brady2014} BRADY O J, GOLDING N, PIGOTT D M, 等. Global temperature constraints on \textit{Aedes aegypti} and \textit{Ae. albopictus} persistence and competence for dengue virus transmission[J/OL]. Parasites \& Vectors, 2014, 7: 338. DOI:10.1186/1756-3305-7-338.
+
+\bibitem{liu2017} LIU K, SUN J, LIU X, 等. Spatiotemporal patterns and determinants of dengue at county level in China from 2005--2017[J/OL]. International Journal of Infectious Diseases, 2018, 77: 96--104. DOI:10.1016/j.ijid.2018.09.028.
+
 \end{thebibliography}
 
 \newpage
@@ -733,7 +820,7 @@ Phase~1 Spearman $\rho$ & 0.705 & 0.716 \\
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.85\textwidth]{../results/data2_1plus3/city_fit_curves/fit_Guangzhou.png}
+\includegraphics[width=0.85\textwidth]{../results/data2_1plus3/phase1_guangzhou_data2.png}
 \caption{广州市月度病例拟合曲线（Phase~1耦合模型，2005--2019年）}
 \label{fig:appendix-gz}
 \end{figure}
