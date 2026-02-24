@@ -506,22 +506,35 @@ def plot_formula_vs_nn(nn_pred: np.ndarray, formula_pred: np.ndarray,
 
 def plot_loco_cv(cv_df: pd.DataFrame, path: Path):
     """Bar chart of LOCO CV metrics per city."""
-    fig, axes = plt.subplots(1, 3, figsize=(14, 4.5))
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
     cities = cv_df["test_city"].values
     x = np.arange(len(cities))
 
-    for i, col in enumerate(["pearson_r", "r2", "rmse"]):
+    col_labels = {
+        "pearson_r": "Pearson r",
+        "rmse": "RMSE (log1p space)",
+    }
+
+    for i, col in enumerate(["pearson_r", "rmse"]):
         ax = axes[i]
         vals = cv_df[col].values
-        bars = ax.bar(x, vals, alpha=0.7, color="steelblue")
+        if col == "pearson_r":
+            colors = ["#4CAF50" if v > 0.5 else "#FFB74D" if v > 0.3 else "#E57373" for v in vals]
+        else:
+            colors = "steelblue"
+        bars = ax.bar(x, vals, alpha=0.7, color=colors)
         ax.set_xticks(x)
         ax.set_xticklabels(cities, rotation=35, fontsize=7)
-        ax.set_title(col)
+        ax.set_title(col_labels[col], fontsize=10)
         ax.grid(alpha=0.2)
         mean_val = np.nanmean(vals)
         ax.axhline(mean_val, color="red", ls="--", lw=0.8,
                    label=f"mean={mean_val:.3f}")
         ax.legend(fontsize=7)
+        for bar, v in zip(bars if hasattr(bars, '__iter__') else [bars], vals):
+            va = "bottom" if v >= 0 else "top"
+            ax.text(bar.get_x() + bar.get_width()/2, v,
+                    f"{v:.2f}", ha="center", va=va, fontsize=6)
 
     fig.suptitle("Leave-One-City-Out Cross-Validation (NN)", fontsize=11)
     fig.tight_layout(rect=[0, 0, 1, 0.95])

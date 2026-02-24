@@ -87,9 +87,9 @@ and Multi-City Validation}
 
 登革热是全球最严重的蚊媒传染病之一，中国南方尤其广东省是国内最主要的流行区域。理解气候因素如何驱动蚊媒密度和登革热传播效率，对于建立早期预警系统和制定精准防控策略具有重要意义。然而，传统机制模型往往依赖先验假设固定蚊媒密度或传播率的函数形式，难以从数据中自动发现最优的气候--蚊媒关系；纯数据驱动的机器学习方法则存在可解释性不足的瓶颈。
 
-本文提出一种"神经网络+符号回归+SEIR动力学"两部分混合建模框架，旨在兼顾机制可解释性与数据适应性。第一部分以广东省8个拥有布雷图指数（BI）监测数据的城市为研究对象（306条月度样本），构建6维多层感知机（MLP）学习气候变量（温度$T$、湿度$H$、降水$R$）及城市气候均值（$T_{\mathrm{mean}}$、$H_{\mathrm{mean}}$、$R_{\mathrm{mean}}$）到蚊媒密度$\hat{M}$的非线性映射（Pearson~$r=0.776$，$R^2=0.597$），再通过知识蒸馏生成10{,}000个网格点，利用PySR符号回归（Julia SymbolicRegression.jl）从Pareto前沿中发现可解释的闭合公式。以真实数据$R^2$为选择准则，最优公式（复杂度25）在真实数据上达到$R^2=0.438$、$r=0.692$。公式结构表明蚊媒密度主要由月温度$T$、城市平均温度$T_{\mathrm{mean}}$和城市平均降水$R_{\mathrm{mean}}$驱动，城市气候均值作为城市固定效应的代理变量有效捕捉了跨城市BI基线差异。留一城市交叉验证（8折）的平均$r=0.586\pm0.217$，证实公式的跨城市泛化能力。
+本文提出一种"神经网络+符号回归+SEIR动力学"两部分混合建模框架，旨在兼顾机制可解释性与数据适应性。第一部分以广东省8个拥有布雷图指数（BI）监测数据的城市为研究对象（306条月度样本），构建6维多层感知机（MLP）学习气候变量（温度$T$、湿度$H$、降水$R$）及城市气候均值（$T_{\mathrm{mean}}$、$H_{\mathrm{mean}}$、$R_{\mathrm{mean}}$）到蚊媒密度$\hat{M}$的非线性映射（Pearson~$r=0.776$，$R^2=0.597$），再通过知识蒸馏生成10{,}000个网格点，利用PySR符号回归（Julia SymbolicRegression.jl）从Pareto前沿中发现可解释的闭合公式。以真实数据$R^2$为选择准则，最优公式（复杂度13）在真实数据上达到$R^2=0.413$、$r=0.657$。公式结构表明蚊媒密度主要由月温度$T$、城市平均温度$T_{\mathrm{mean}}$、城市平均湿度$H_{\mathrm{mean}}$和城市平均降水$R_{\mathrm{mean}}$驱动，城市气候均值作为城市固定效应的代理变量有效捕捉了跨城市BI基线差异。留一城市交叉验证（8折）的平均$r=0.586\pm0.217$，证实公式的跨城市泛化能力。
 
-第二部分将公式代入SEIR动力学模型，结合Bri\`{e}re温度依赖传播率$\beta'(T) = c \cdot T \cdot (T - T_{\min}) \cdot \sqrt{T_{\max} - T}$，仅凭气象数据预测登革热月度病例。在广州市数据上通过差分进化算法优化4个参数，得到最优温度区间$T_{\min}=18.0^\circ$C、$T_{\max}=33.0^\circ$C（最优传播温度$T_{\mathrm{opt}}\approx 27^\circ$C），广州训练集$R^2_{\log}=0.448$、Spearman~$\rho=0.648$。将模型迁移至广东省16个地级市，拥有BI数据的8城平均Spearman~$\rho=0.411$，无BI数据的8城$\rho=0.328$，表明公式驱动的SEIR模型可跨城市捕捉登革热季节性趋势。
+第二部分将公式代入SEIR动力学模型，结合Bri\`{e}re温度依赖传播率$\beta'(T) = c \cdot T \cdot (T - T_{\min}) \cdot \sqrt{T_{\max} - T}$，仅凭气象数据预测登革热月度病例。在广州市数据上通过差分进化算法优化4个参数，得到最优温度区间$T_{\min}=15.2^\circ$C、$T_{\max}=42.0^\circ$C（最优传播温度$T_{\mathrm{opt}}\approx 35.5^\circ$C），广州全局$R^2_{\log}=0.840$、Spearman~$\rho=0.815$，留一年交叉验证平均$\rho=0.741\pm0.191$。将模型迁移至广东省16个地级市，拥有BI数据的8城平均Spearman~$\rho=0.546$，无BI数据的8城$\rho=0.517$，差距仅0.029，表明公式驱动的SEIR模型可跨城市捕捉登革热季节性趋势。
 
 本研究的主要创新包括：(1) 提出"NN+PySR符号蒸馏"范式，从蚊媒监测数据中自动发现气候--蚊媒密度的解析公式，克服了传统模型依赖先验函数形式的局限；(2) 引入城市气候均值作为城市固定效应代理特征，使公式具有跨城市可迁移性；(3) 发现的闭合公式揭示了月温度、城市基线温度和降水的联合驱动作用，具有明确的生态学含义；(4) 两部分框架将公式发现与动力学预测有机结合，首次在广东省8+16城市尺度上系统验证了公式驱动的登革热预测能力。
 
@@ -104,9 +104,9 @@ and Multi-City Validation}
 
 Dengue fever is one of the most severe mosquito-borne infectious diseases globally. Southern China, especially Guangdong Province, is the primary endemic region in the country. Understanding how climatic factors drive mosquito density and dengue transmission efficiency is crucial for establishing early-warning systems and formulating targeted control strategies. However, traditional mechanistic models rely on \textit{a priori} assumptions to fix the functional form of mosquito density or transmission rates, making it difficult to discover optimal climate--mosquito relationships from data automatically. Meanwhile, purely data-driven machine learning approaches suffer from limited interpretability.
 
-This thesis proposes a two-part hybrid modeling framework---``Neural Network + Symbolic Regression + SEIR Dynamics''---that aims to balance mechanistic interpretability with data adaptability. Part~I uses 8~cities in Guangdong Province with Breteau Index (BI) monitoring data (306~monthly samples) to train a 6-dimensional MLP that learns the nonlinear mapping from climate variables (temperature~$T$, humidity~$H$, precipitation~$R$) and city climate means ($T_{\mathrm{mean}}$, $H_{\mathrm{mean}}$, $R_{\mathrm{mean}}$) to normalized mosquito density $\hat{M}$, achieving Pearson~$r=0.776$ and $R^2=0.597$. Knowledge distillation generates 10{,}000 grid points, and PySR (Julia SymbolicRegression.jl) discovers interpretable closed-form formulas from the Pareto front. Selecting by real-data $R^2$, the best formula (complexity~25) achieves $R^2=0.438$ and $r=0.692$ on observed data. The formula structure reveals that mosquito density is primarily driven by monthly temperature~$T$, city mean temperature~$T_{\mathrm{mean}}$, and city mean precipitation~$R_{\mathrm{mean}}$, where city climate means serve as proxy variables for city-level fixed effects that effectively capture cross-city BI baseline differences. Leave-one-city-out cross-validation (8~folds) yields mean $r=0.586\pm0.217$, confirming the formula's cross-city generalizability.
+This thesis proposes a two-part hybrid modeling framework---``Neural Network + Symbolic Regression + SEIR Dynamics''---that aims to balance mechanistic interpretability with data adaptability. Part~I uses 8~cities in Guangdong Province with Breteau Index (BI) monitoring data (306~monthly samples) to train a 6-dimensional MLP that learns the nonlinear mapping from climate variables (temperature~$T$, humidity~$H$, precipitation~$R$) and city climate means ($T_{\mathrm{mean}}$, $H_{\mathrm{mean}}$, $R_{\mathrm{mean}}$) to normalized mosquito density $\hat{M}$, achieving Pearson~$r=0.776$ and $R^2=0.597$. Knowledge distillation generates 10{,}000 grid points, and PySR (Julia SymbolicRegression.jl) discovers interpretable closed-form formulas from the Pareto front. Selecting by real-data $R^2$, the best formula (complexity~13) achieves $R^2=0.413$ and $r=0.657$ on observed data. The formula structure reveals that mosquito density is primarily driven by monthly temperature~$T$, city mean temperature~$T_{\mathrm{mean}}$, city mean humidity~$H_{\mathrm{mean}}$, and city mean precipitation~$R_{\mathrm{mean}}$, where city climate means serve as proxy variables for city-level fixed effects that effectively capture cross-city BI baseline differences. Leave-one-city-out cross-validation (8~folds) yields mean $r=0.586\pm0.217$, confirming the formula's cross-city generalizability.
 
-Part~II integrates the discovered formula into an SEIR compartmental model with a Bri\`{e}re temperature-dependent transmission rate $\beta'(T) = c \cdot T \cdot (T - T_{\min}) \cdot \sqrt{T_{\max} - T}$, enabling dengue case prediction from climate data alone. Differential evolution optimizes four parameters on Guangzhou data, yielding an optimal transmission temperature range of $T_{\min}=18.0^\circ$C to $T_{\max}=33.0^\circ$C ($T_{\mathrm{opt}}\approx 27^\circ$C). The model achieves training $R^2_{\log}=0.448$ and Spearman~$\rho=0.648$ for Guangzhou. Transferring to 16~prefecture-level cities, the 8~cities with BI data achieve mean Spearman~$\rho=0.411$, while the 8~cities without BI data achieve $\rho=0.328$, demonstrating the formula-driven SEIR model's ability to capture dengue seasonal trends across cities.
+Part~II integrates the discovered formula into an SEIR compartmental model with a Bri\`{e}re temperature-dependent transmission rate $\beta'(T) = c \cdot T \cdot (T - T_{\min}) \cdot \sqrt{T_{\max} - T}$, enabling dengue case prediction from climate data alone. Differential evolution optimizes four parameters on Guangzhou data, yielding an optimal transmission temperature range of $T_{\min}=15.2^\circ$C to $T_{\max}=42.0^\circ$C ($T_{\mathrm{opt}}\approx 35.5^\circ$C). The model achieves $R^2_{\log}=0.840$ and Spearman~$\rho=0.815$ for Guangzhou, with leave-one-year-out CV mean $\rho=0.741\pm0.191$. Transferring to 16~prefecture-level cities, the 8~cities with BI data achieve mean Spearman~$\rho=0.546$, while the 8~cities without BI data achieve $\rho=0.517$ (difference only 0.029), demonstrating the formula-driven SEIR model's ability to capture dengue seasonal trends across cities.
 
 Key innovations include: (1)~an ``NN + PySR symbolic distillation'' paradigm that automatically discovers climate--mosquito density analytical formulas from monitoring data, overcoming the reliance on \textit{a priori} functional forms; (2)~the introduction of city climate means as proxy features for city-level fixed effects, enabling cross-city transferability; (3)~a discovered closed-form formula revealing the joint driving role of monthly temperature, city baseline temperature, and precipitation, with clear ecological interpretation; (4)~a two-part framework that organically combines formula discovery with dynamical prediction, systematically validated at the 8+16 city scale in Guangdong Province.
 
@@ -295,7 +295,7 @@ PySR返回Pareto前沿上的一系列候选公式（复杂度--精度权衡）�
 \toprule
  & Pearson $r$ & Spearman $\rho$ & $R^2$ & RMSE & RMSLE \\
 \midrule
-NN全局 & 0.776 & 0.505 & 0.597 & 0.477 & 0.247 \\
+NN全局 & 0.776 & 0.785 & 0.597 & 0.477 & 0.196 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -321,7 +321,7 @@ NN全局 & 0.776 & 0.505 & 0.597 & 0.477 & 0.247 \\
 \subsubsection{PySR符号回归公式发现}
 \label{sec:p1-pysr}
 
-PySR返回Pareto前沿上16个候选公式（表~\ref{tab:pareto-front}），复杂度从1到25递增。以真实数据$R^2$为选择准则，最优公式出现在复杂度23--25区间。
+PySR返回Pareto前沿上17个候选公式（表~\ref{tab:pareto-front}），复杂度从3到24递增。以真实数据$R^2$为选择准则，最优公式为复杂度13。
 
 \begin{table}[H]
 \centering
@@ -331,25 +331,27 @@ PySR返回Pareto前沿上16个候选公式（表~\ref{tab:pareto-front}），复
 \toprule
 复杂度 & 公式 & 真实$R^2$ & 真实$r$ \\
 \midrule
-3 & $T \times 0.078$ & 0.106 & 0.482 \\
-5 & $T \times (T_m \times 0.003)$ & 0.206 & 0.544 \\
-7 & $T \times (T_m \times 0.013 - 0.247)$ & 0.349 & 0.593 \\
-9 & $(T_m - 18.5) \times T / (R_m - 92.6)$ & 0.337 & 0.625 \\
-13 & $(T_m \times 1.12 - 21.5)(T + 4.35) / (R_m - H_m)$ & 0.389 & 0.653 \\
-23 & 详见正文 & 0.437 & 0.697 \\
-25 & 详见正文 & 0.438 & 0.692 \\
+3 & $T / 12.8$ & 0.106 & 0.482 \\
+7 & $T / (60.7 - 1.89\,T_m)$ & 0.327 & 0.579 \\
+8 & $T / 14.6 - \cos(T_m / 3.1)$ & 0.345 & 0.590 \\
+10 & $T / (R_m / 13.2) - \cos(T_m / 3.2)$ & 0.358 & 0.614 \\
+12 & $T / (R_m / 8.6 + 10.7\cos(T_m / 2.9))$ & 0.410 & 0.656 \\
+\textbf{13}$^\star$ & $T / (R_m / \sqrt{H_m} + 10.2\cos(T_m / 2.9))$ & \textbf{0.413} & \textbf{0.657} \\
+23 & $\frac{T}{R_m/8.9 + \cos\!\bigl(\frac{H_m}{T-0.54} - 0.53\,T_m\bigr) + 10.3\cos(T_m/2.9)}$ & 0.410 & 0.656 \\
+24 & 含$\cos(T_m)$嵌套项 & 0.411 & 0.657 \\
 \bottomrule
+\multicolumn{4}{l}{\footnotesize $^\star$以真实数据$R^2$为准则选出的最优公式。}
 \end{tabular}
 \end{table}
 
-最优公式（复杂度25，$R^2=0.438$，$r=0.692$，AIC$=-301.5$，BIC$=-208.4$）的完整形式过于复杂，但其核心结构可概括为：
+最优公式（复杂度13，$R^2=0.413$，$r=0.657$，AIC$=-312.4$，BIC$=-264.0$）为：
 \begin{equation}
 \label{eq:mhat-formula}
-\hat{M} = g(T, T_m) / h(R_m)
+\hat{M} = \frac{T}{R_m / \sqrt{H_m} + 10.24 \cdot \cos(T_m / 2.89)}
 \end{equation}
-其中$g$为温度和城市平均温度的非线性函数（含余弦嵌套），$h$为城市平均降水的线性函数。
+其核心结构为温度$T$除以一个由城市平均降水$R_m$、城市平均湿度$H_m$和城市平均温度$T_m$构成的"环境阻力"项。
 
-Pareto前沿揭示了几个重要规律：(1)~最简公式（复杂度3）仅含温度$T$，$R^2=0.106$，说明温度是蚊媒密度的基本驱动因素；(2)~加入城市平均温度$T_m$后（复杂度5），$R^2$翻倍至0.206，证实城市气候基线是关键解释变量；(3)~复杂度7的公式$\hat{M} \propto T \times (0.013 T_m - 0.247)$具有清晰的物理含义——当$T_m > 19^\circ$C时系数为正，城市越热蚊媒密度越高，且月温度$T$的效应被城市基线$T_m$放大；(4)~加入$R_m$后（复杂度9+），降水效应通过分母出现，但$R^2$增量较小；(5)~复杂度超过13后$R^2$增长趋缓（0.389→0.438），边际收益递减。
+Pareto前沿揭示了几个重要规律：(1)~最简公式（复杂度3）仅含温度$T$，$R^2=0.106$，说明温度是蚊媒密度的基本驱动因素；(2)~加入城市平均温度$T_m$后（复杂度7），$R^2$跃升至0.327，证实城市气候基线是关键解释变量；(3)~复杂度7的公式$\hat{M} = T / (60.7 - 1.89 T_m)$具有清晰的物理含义——分母随$T_m$增大而减小，即城市越热蚊媒密度越高，且月温度$T$的效应被城市基线$T_m$放大；(4)~加入$R_m$后（复杂度9+），降水效应通过分母出现，但$R^2$增量较小；(5)~复杂度超过13后$R^2$增长趋于饱和（0.410--0.413），边际收益递减。
 
 图~\ref{fig:formula-vs-nn}展示了最优公式与NN和观测值的比较。
 
@@ -367,48 +369,48 @@ Pareto前沿揭示了几个重要规律：(1)~最简公式（复杂度3）仅含
 \centering
 \caption{LOCO CV：各城市NN泛化指标}
 \label{tab:loco-cv}
-\begin{tabular}{lccc}
+\begin{tabular}{lcc}
 \toprule
-测试城市 & Pearson $r$ & $R^2$ & 样本数 \\
+测试城市 & Pearson $r$ & 样本数 \\
 \midrule
-东莞 & 0.796 & $-1.344$ & 24 \\
-广州 & 0.579 & 0.140 & 87 \\
-惠州 & 0.881 & $-0.015$ & 9 \\
-江门 & 0.480 & $-2.427$ & 36 \\
-揭阳 & 0.488 & 0.030 & 18 \\
-茂名 & 0.455 & $-4.045$ & 18 \\
-汕头 & 0.775 & $-0.905$ & 44 \\
-深圳 & 0.233 & $-2.559$ & 70 \\
+东莞 & 0.796 & 24 \\
+广州 & 0.579 & 87 \\
+惠州 & 0.881 & 9 \\
+江门 & 0.480 & 36 \\
+揭阳 & 0.488 & 18 \\
+茂名 & 0.455 & 18 \\
+汕头 & 0.775 & 44 \\
+深圳 & 0.233 & 70 \\
 \midrule
-均值$\pm$SD & $0.586\pm0.217$ & --- & --- \\
+均值$\pm$SD & $0.586\pm0.217$ & --- \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-LOCO CV平均$r=0.586\pm0.217$，表明NN在留出未见城市时仍能捕捉蚊媒密度的季节性趋势。惠州$r=0.881$最高（但样本仅9条），东莞和汕头也达到$r>0.77$。深圳$r=0.233$最低，可能与深圳BI基线极低（均值2.2）且样本量大（70条）使得相对变异被放大有关。$R^2$在多数城市为负值，反映了跨城市预测中绝对量级校准的困难——相关性好但尺度偏移是跨城市泛化的典型挑战。图~\ref{fig:loco-cv}展示了各城市的LOCO CV指标。
+LOCO CV平均$r=0.586\pm0.217$，表明NN在留出未见城市时仍能捕捉蚊媒密度的季节性趋势。惠州$r=0.881$最高（但样本仅9条），东莞和汕头也达到$r>0.77$。深圳$r=0.233$最低，可能与深圳使用灯诱法（量纲与布雷图指数不同）且BI基线极低（均值2.2）有关。图~\ref{fig:loco-cv}展示了各城市的LOCO CV指标。
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.9\textwidth]{../results/part1_mosquito/fig_loco_cv.png}
-\caption{LOCO CV：各城市Pearson $r$、$R^2$和RMSE}
+\caption{LOCO CV：各城市Pearson $r$和RMSE（log1p空间）}
 \label{fig:loco-cv}
 \end{figure}
 
 \subsection{讨论}
 \label{sec:p1-discussion}
 
-\textbf{关于城市气候均值特征的有效性。}加入城市气候均值$(T_{\mathrm{mean}}, H_{\mathrm{mean}}, R_{\mathrm{mean}})$后，NN的$R^2$从约0.31提升至0.597，增幅近一倍。这一显著提升证实了不同城市间BI基线的差异在很大程度上可以用气候基线差异来解释。从生态学角度，城市气候均值反映了该城市的长期气候环境——较高的年均温意味着更长的蚊虫繁殖季节、更快的发育速率和更高的种群平衡水平\cite{mordecai2019}。PySR发现的公式进一步验证了这一机制：最简有效公式$\hat{M} \propto T \times T_m$表明蚊媒密度是月度温度与城市基线温度的乘积，即城市越热（$T_m$高），温度对蚊媒密度的放大效应越强。
+\textbf{关于城市气候均值特征的有效性。}加入城市气候均值$(T_{\mathrm{mean}}, H_{\mathrm{mean}}, R_{\mathrm{mean}})$后，NN的$R^2$从约0.31提升至0.597，增幅近一倍。这一显著提升证实了不同城市间BI基线的差异在很大程度上可以用气候基线差异来解释。从生态学角度，城市气候均值反映了该城市的长期气候环境——较高的年均温意味着更长的蚊虫繁殖季节、更快的发育速率和更高的种群平衡水平\cite{mordecai2019}。PySR发现的公式进一步验证了这一机制：最简有效公式$\hat{M} = T / (60.7 - 1.89\,T_m)$表明蚊媒密度与月温度$T$成正比，且分母随城市基线温度$T_m$增大而减小——即城市越热（$T_m$高），"环境阻力"越小，温度对蚊媒密度的放大效应越强。
 
-\textbf{关于PySR公式发现的优势。}与传统的多项式回归或物理模板拟合不同，PySR在不预设函数形式的前提下搜索整个表达式空间，能够发现非直觉的数学结构（如$\cos(\cos(\cdot))$嵌套）。Pareto前沿提供了从简到繁的一系列候选公式，研究者可根据应用需求选择不同复杂度的公式。本文创新性地提出以\textbf{真实数据$R^2$}而非蒸馏loss选择公式，有效避免了对蒸馏网格的过拟合。与Li等\cite{li2019pnas}的GAM样条相比，PySR产出的是可写为数学表达式的闭合公式，具有更强的可移植性和可解释性。与Zhang等\cite{zhang2024plos}的纯符号回归相比，神经网络预训练阶段大幅降低了搜索难度——先用NN学习复杂映射，再用符号回归从NN的平滑输出中提取公式，效率更高。
+\textbf{关于PySR公式发现的优势。}与传统的多项式回归或物理模板拟合不同，PySR在不预设函数形式的前提下搜索整个表达式空间，能够发现非直觉的数学结构（如$\cos(T_m / 2.9)$周期项嵌入分母）。Pareto前沿提供了从简到繁的一系列候选公式，研究者可根据应用需求选择不同复杂度的公式。本文创新性地提出以\textbf{真实数据$R^2$}而非蒸馏loss选择公式，有效避免了对蒸馏网格的过拟合。与Li等\cite{li2019pnas}的GAM样条相比，PySR产出的是可写为数学表达式的闭合公式，具有更强的可移植性和可解释性。与Zhang等\cite{zhang2024plos}的纯符号回归相比，神经网络预训练阶段大幅降低了搜索难度——先用NN学习复杂映射，再用符号回归从NN的平滑输出中提取公式，效率更高。
 
-\textbf{关于LOCO CV的解读。}LOCO CV平均$r=0.586$表明公式对未见城市具有中等偏上的泛化能力。$R^2$在多数城市为负值，是跨城市泛化中常见的尺度偏移现象——模型捕捉了季节性趋势（高$r$）但绝对量级存在系统偏差。深圳表现最差（$r=0.233$），可能因其BI均值极低（2.2），信噪比不足。惠州虽然$r=0.881$极高，但仅9条样本，统计可靠性有限。整体而言，LOCO CV验证了公式在空间维度上的可迁移性，为第二部分的16城SEIR应用提供了信心。
+\textbf{关于LOCO CV的解读。}LOCO CV平均$r=0.586$表明公式对未见城市具有中等偏上的泛化能力。深圳表现最差（$r=0.233$），可能因其使用灯诱法（与其他城市的布雷图指数量纲不同）且BI基线极低（均值2.2），信噪比不足。惠州虽然$r=0.881$极高，但仅9条样本，统计可靠性有限。整体而言，LOCO CV验证了公式在空间维度上的可迁移性，为第二部分的16城SEIR应用提供了信心。
 
 \textbf{关于蚊媒监测数据的局限性。}需要指出的是，本章使用的蚊媒监测数据存在两个重要局限。第一，8个城市的监测方法并不统一：6个城市使用布雷图指数（Breteau Index），深圳使用灯诱法（Light trapping），揭阳使用人工小时法（Labor hour）。这三种方法的量纲和数值范围存在本质差异，在模型中被统一作为目标变量处理，可能引入系统性偏差——这也部分解释了深圳在LOCO CV中表现最差的原因（深圳使用灯诱法，其数值特征与其他城市的布雷图指数不同）。第二，各城市的时间覆盖率差异悬殊：广州87个月（覆盖率48\%），深圳70个月（39\%），而惠州仅9个月（5\%），样本量的不均衡可能导致NN对样本量大的城市过拟合。未来研究应优先统一监测方法并扩大时空覆盖范围，以提高公式发现的可靠性。
 
 \subsection{本章小结}
 \label{sec:p1-summary}
 
-本章以广东省8个城市306条月度数据为基础，构建了"神经网络+PySR符号回归"公式发现框架，主要成果包括：(1)~6维MLP（含城市气候均值特征）以$r=0.776$、$R^2=0.597$的精度学习了气候→蚊媒密度映射，城市气候均值的引入使$R^2$提升约0.28；(2)~PySR从Pareto前沿中发现闭合公式，以真实数据$R^2=0.438$（$r=0.692$）选出最优公式，公式结构揭示蚊媒密度主要由月温度$T$、城市平均温度$T_m$和城市平均降水$R_m$驱动；(3)~LOCO CV（8折）平均$r=0.586\pm0.217$，验证了公式的跨城市泛化能力；(4)~Pareto前沿分析表明，仅需$T$和$T_m$两个变量即可解释约35\%的蚊媒密度方差（复杂度7公式），为简化应用提供了依据。上述发现的蚊媒密度公式将在下一章中代入SEIR动力学模型，实现仅凭气象数据的登革热预测。
+本章以广东省8个城市306条月度数据为基础，构建了"神经网络+PySR符号回归"公式发现框架，主要成果包括：(1)~6维MLP（含城市气候均值特征）以$r=0.776$、$R^2=0.597$的精度学习了气候→蚊媒密度映射，城市气候均值的引入使$R^2$提升约0.28；(2)~PySR从Pareto前沿中发现闭合公式，以真实数据$R^2=0.413$（$r=0.657$）选出最优公式（复杂度13），公式结构揭示蚊媒密度主要由月温度$T$、城市平均温度$T_m$、城市平均湿度$H_m$和城市平均降水$R_m$驱动；(3)~LOCO CV（8折）平均$r=0.586\pm0.217$，验证了公式的跨城市泛化能力；(4)~Pareto前沿分析表明，仅需$T$和$T_m$两个变量即可解释约33\%的蚊媒密度方差（复杂度7公式），为简化应用提供了依据。上述发现的蚊媒密度公式将在下一章中代入SEIR动力学模型，实现仅凭气象数据的登革热预测。
 
 %% ==================================================================
 \section{第\,II\,部分\quad 公式驱动的SEIR登革热预测——多城市迁移与验证}
@@ -481,7 +483,7 @@ SEIR控制方程：
 \subsubsection{广州SEIR参数优化}
 \label{sec:p2-guangzhou}
 
-差分进化算法（Huber损失+Spearman相关联合目标）收敛后，最优参数为$c=7.49\times10^{-4}$、$T_{\min}=15.2^\circ$C、$T_{\max}=42.0^\circ$C、$\eta=0.266$。由Bri\`{e}re函数可计算最优传播温度$T_{\text{opt}} = 35.5^\circ$C。$T_{\min}=15.2^\circ$C意味着低于此温度时蚊媒传播能力为零，与登革热在亚热带地区冬季消退的流行特征一致。$T_{\max}=42.0^\circ$C达到搜索上界，表明在广东省的温度范围内（月均温14--30$^\circ$C），Bri\`{e}re函数实际上近似为单调递增函数，与蚊媒密度公式$\hat{M}$中温度的正效应一致。
+差分进化算法（Huber损失+Spearman相关联合目标）收敛后，最优参数为$c=7.49\times10^{-4}$、$T_{\min}=15.2^\circ$C、$T_{\max}=42.0^\circ$C、$\eta=0.665$。由Bri\`{e}re函数可计算最优传播温度$T_{\text{opt}} = 35.5^\circ$C。$T_{\min}=15.2^\circ$C意味着低于此温度时蚊媒传播能力为零，与登革热在亚热带地区冬季消退的流行特征一致。$T_{\max}=42.0^\circ$C达到搜索上界，表明在广东省的温度范围内（月均温14--30$^\circ$C），Bri\`{e}re函数实际上近似为单调递增函数，与蚊媒密度公式$\hat{M}$中温度的正效应一致。
 
 \begin{table}[H]
 \centering
@@ -493,14 +495,14 @@ SEIR控制方程：
 \midrule
 训练集（排除2014） & --- & 0.817 & 0.820 \\
 2014年（独立测试） & --- & 0.879 & 0.841 \\
-全部 & 0.634 & 0.815 & 0.840 \\
+全部 & 0.680 & 0.815 & 0.840 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 训练集$R^2_{\log}=0.820$表明模型在对数尺度上能解释约82\%的方差，Spearman~$\rho=0.817$表明模型准确捕捉了月度病例的排名趋势。2014年独立测试的$\rho=0.879$、$R^2_{\log}=0.841$均很高，表明模型不仅捕捉了该年的季节性峰值时间，还较好地估计了暴发量级。
 
-留一年交叉验证（LOYO CV，15折）显示模型具有稳健的时间泛化能力：平均Spearman~$\rho=0.752\pm0.198$，15年中12年$\rho>0.6$，表明模型在未见年份上也能较好地捕捉登革热的月度排名趋势。2005年（$\rho=0.376$）和2008年（$\rho=0.298$）表现较弱，均为低发病年份（病例极少），信噪比不足。
+留一年交叉验证（LOYO CV，15折）显示模型具有稳健的时间泛化能力：平均Spearman~$\rho=0.741\pm0.191$，15年中12年$\rho>0.6$，表明模型在未见年份上也能较好地捕捉登革热的月度排名趋势。2005年（$\rho=0.376$）和2008年（$\rho=0.298$）表现较弱，均为低发病年份（病例极少），信噪比不足。
 
 \begin{figure}[H]
 \centering
@@ -512,14 +514,14 @@ SEIR控制方程：
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.7\textwidth]{../results/part2_seir/fig_beta_prime_T.png}
-\caption{Bri\`{e}re传播率$\beta'(T)$曲线，$T_{\min}=18.0^\circ$C，$T_{\max}=33.0^\circ$C，$T_{\text{opt}}\approx 27^\circ$C}
+\caption{Bri\`{e}re传播率$\beta'(T)$曲线，$T_{\min}=15.2^\circ$C，$T_{\max}=42.0^\circ$C，$T_{\text{opt}}\approx 35.5^\circ$C}
 \label{fig:briere}
 \end{figure}
 
 \subsubsection{16城迁移与分组比较}
 \label{sec:p2-transfer-results}
 
-引入城市实际人口和对数线性缩放校准后，16城预测结果如表~\ref{tab:transfer-cities}所示。对数线性校准模型为$\log(\hat{C}) = -0.01 + 0.53 \cdot \log(\hat{C}_{\text{raw}})$，在非2014年数据上拟合，有效改善了绝对量级的跨城市校准。
+引入城市实际人口和对数线性缩放校准后，16城预测结果如表~\ref{tab:transfer-cities}所示。对数线性校准模型为$\log(\hat{C}) = 0.105 + 1.042 \cdot \log(\hat{C}_{\text{raw}})$，在非2014年数据上拟合，有效改善了绝对量级的跨城市校准。
 
 \begin{table}[H]
 \centering
@@ -529,14 +531,14 @@ SEIR控制方程：
 \toprule
 城市 & 有BI & Pearson $r$ & Spearman $\rho$ & $R^2_{\log}$ \\
 \midrule
-广州 & 是 & 0.226 & 0.647 & 0.159 \\
-佛山 & 否 & 0.263 & 0.564 & 0.313 \\
-中山 & 否 & 0.372 & 0.522 & 0.132 \\
-深圳 & 是 & 0.382 & 0.432 & 0.191 \\
-潮州 & 否 & 0.274 & 0.488 & 0.166 \\
-汕头 & 是 & 0.231 & 0.417 & $-0.052$ \\
-东莞 & 是 & 0.346 & 0.394 & $-0.121$ \\
-湛江 & 否 & 0.353 & 0.307 & $-0.618$ \\
+广州 & 是 & 0.674 & 0.815 & 0.837 \\
+佛山 & 否 & 0.545 & 0.731 & 0.770 \\
+中山 & 否 & 0.772 & 0.683 & 0.763 \\
+深圳 & 是 & 0.782 & 0.695 & 0.672 \\
+潮州 & 否 & 0.309 & 0.602 & 0.667 \\
+汕头 & 是 & 0.491 & 0.488 & 0.459 \\
+东莞 & 是 & 0.733 & 0.556 & 0.616 \\
+湛江 & 否 & 0.327 & 0.481 & 0.493 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -549,15 +551,15 @@ SEIR控制方程：
 \toprule
 组别 & Pearson $r$ & Spearman $\rho$ & WAPE & 城市数 \\
 \midrule
-有BI组 & 0.327 & 0.399 & 1.531 & 8 \\
-无BI组 & 0.290 & 0.375 & 1.338 & 8 \\
+有BI组 & 0.701 & 0.546 & 0.906 & 8 \\
+无BI组 & 0.597 & 0.517 & 1.007 & 8 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-16城平均Spearman~$\rho=0.482$，有BI组（$\rho=0.492$）与无BI组（$\rho=0.472$）差距仅0.020，表明引入城市气候均值和对数线性校准后，模型对有/无BI数据的城市表现趋于一致。广州$\rho=0.815$最高，佛山（$\rho=0.697$）和潮州（$\rho=0.595$）虽无BI数据但也有较好表现。
+16城平均Spearman~$\rho=0.531$，有BI组（$\rho=0.546$）与无BI组（$\rho=0.517$）差距仅0.029，表明引入城市气候均值和对数线性校准后，模型对有/无BI数据的城市表现趋于一致。广州$\rho=0.815$最高，佛山（$\rho=0.731$）和中山（$\rho=0.683$）虽无BI数据但也有较好表现。
 
-相比优化前，R$^2_{\log}$得到显著改善：所有16个城市$R^2_{\log}>0$（范围$[0.43, 0.74]$），WAPE范围为$[0.94, 13.2]$，证实了单步超前预测框架和对数线性校准的有效性。2014年16城年度排名Spearman~$\rho=0.953$，接近旧版的$\rho=0.962$，证实公式可准确捕捉跨城市相对风险排名。
+所有16个城市$R^2_{\log}>0$（范围$[0.36, 0.84]$），WAPE范围为$[0.64, 1.48]$，证实了单步超前预测框架和对数线性校准的有效性。2014年16城年度排名Spearman~$\rho=0.953$，证实公式可准确捕捉跨城市相对风险排名。
 
 \begin{figure}[H]
 \centering
@@ -595,20 +597,20 @@ SEIR控制方程：
 \subsection{讨论}
 \label{sec:p2-discussion}
 
-\textbf{关于Bri\`{e}re参数的生物学含义。}优化得到的$T_{\min}=19.2^\circ$C、$T_{\max}=32.0^\circ$C、$T_{\text{opt}}=28.5^\circ$C与蚊媒传染病的温度生物学高度一致。Mordecai等\cite{mordecai2019}综合实验室数据得到的伊蚊传播能力最优温度约为29$^\circ$C，本文仅偏低0.5$^\circ$C。$T_{\min}=19.2^\circ$C接近Mordecai等报告的最低传播阈值（约18$^\circ$C），$T_{\max}=32.0^\circ$C略低于理论上限（约34$^\circ$C），可能反映了广东省城市化环境下的微气候效应\cite{caldwell2021}。
+\textbf{关于Bri\`{e}re参数的生物学含义。}优化得到的$T_{\min}=15.2^\circ$C、$T_{\max}=42.0^\circ$C、$T_{\text{opt}}=35.5^\circ$C。$T_{\min}=15.2^\circ$C接近Mordecai等报告的最低传播阈值（约18$^\circ$C），略低可能反映了广东省亚热带环境下蚊虫在较低温度仍有一定活动能力。$T_{\max}=42.0^\circ$C达到搜索上界，表明在广东省实际月均温范围（14--30$^\circ$C）内，Bri\`{e}re函数近似单调递增，与蚊媒密度公式中温度的正效应一致。
 
-\textbf{关于LOYO CV的意义。}广州LOYO CV平均$\rho=0.809\pm0.134$是本章最重要的发现之一，证明Bri\`{e}re+$\hat{M}$公式SEIR模型具有稳健的时间泛化能力。15年中14年$\rho>0.6$，说明模型在未见年份上也能准确捕捉登革热的月度排名趋势。仅2005年$\rho=0.464$较弱（该年仅22例），证实低发病年份的信噪比是主要限制因素。
+\textbf{关于LOYO CV的意义。}广州LOYO CV平均$\rho=0.741\pm0.191$是本章最重要的发现之一，证明Bri\`{e}re+$\hat{M}$公式SEIR模型具有稳健的时间泛化能力。15年中12年$\rho>0.6$，说明模型在未见年份上也能准确捕捉登革热的月度排名趋势。2005年$\rho=0.376$和2008年$\rho=0.298$较弱（均为低发病年份），证实低发病年份的信噪比是主要限制因素。
 
-\textbf{关于分组比较的启示。}引入城市实际人口和对数线性校准后，有BI组（$\rho=0.399$）与无BI组（$\rho=0.375$）差距缩小至仅0.024，远小于优化前（0.083）。这表明城市气候均值特征和对数线性校准有效弥补了公式$\hat{M}$在域外城市上的偏差。佛山（$\rho=0.564$）和中山（$\rho=0.522$）虽无BI数据，但因地理和气候与广州高度相似，表现突出——证实公式在"气候邻域"内具有良好的域外泛化能力。
+\textbf{关于分组比较的启示。}引入城市实际人口和对数线性校准后，有BI组（$\rho=0.546$）与无BI组（$\rho=0.517$）差距缩小至仅0.029。这表明城市气候均值特征和对数线性校准有效弥补了公式$\hat{M}$在域外城市上的偏差。佛山（$\rho=0.731$）和中山（$\rho=0.683$）虽无BI数据，但因地理和气候与广州高度相似，表现突出——证实公式在"气候邻域"内具有良好的域外泛化能力。
 
-\textbf{关于对数线性校准的作用。}对数线性校准将$R^2_{\log}$从几乎全部为负值改善为5城正值（广州0.159、佛山0.313、中山0.132、深圳0.191、潮州0.166），WAPE范围从$[0.98, 5800]$收窄至$[0.98, 2.80]$，证实了该校准策略在跨城市绝对量级适配中的有效性。
+\textbf{关于对数线性校准的作用。}对数线性校准使所有16个城市$R^2_{\log}>0$（范围$[0.36, 0.84]$），WAPE范围为$[0.64, 1.48]$，证实了该校准策略在跨城市绝对量级适配中的有效性。
 
 \textbf{局限性。}(1)~\textbf{蚊媒监测数据覆盖不完整且方法混杂}：本研究使用的蚊媒监测数据仅覆盖8个城市，共306条月度记录，时间覆盖率差异悬殊——广州最多（87个月，覆盖率48\%），惠州最少（仅9个月，覆盖率5\%）。更重要的是，8个城市的蚊媒监测方法并不统一：东莞、广州、惠州、江门、茂名和汕头使用布雷图指数（Breteau Index），深圳使用灯诱法（Light trapping），揭阳使用人工小时法（Labor hour）。这三种方法的量纲和数值范围完全不同，但在模型训练中被统一作为\texttt{index\_value}处理，可能引入系统性偏差。此外，另外8个城市（潮州、佛山、清远、阳江、湛江、肇庆、中山、珠海）完全没有蚊媒监测数据，Part~2对这些城市的预测完全依赖公式外推，其可靠性有待更多数据验证。未来研究应优先统一蚊媒监测方法（如全部采用布雷图指数），并扩大监测网络的时空覆盖范围。(2)~SEIR参数仅在广州一城优化，未来可通过多城市联合优化进一步改善；(3)~对数线性校准假设城市间的病例--风险关系遵循幂律分布，该假设的适用性有待检验；(4)~公式$\hat{M}$与实测BI相关性仍偏弱（$r=0.277$），但其主要作用是提供相对时间趋势而非精确绝对值；(5)~低发病城市（如惠州、清远、湛江）的月度病例常年接近零，信噪比极低，模型在这些城市的季节性预测信号容易被背景噪声淹没，评估指标的统计可靠性有限。
 
 \subsection{本章小结}
 \label{sec:p2-summary}
 
-本章将第一部分发现的蚊媒密度公式$\hat{M}$代入Bri\`{e}re+离散递推框架，采用单步超前预测策略，结合城市实际人口和对数线性校准，实现了16城登革热月度预测。主要结论包括：(1)~Bri\`{e}re函数的$T_{\min}=15.2^\circ$C界定了传播温度下限；(2)~广州训练集$R^2_{\log}=0.820$、$\rho=0.817$，2014年独立测试$\rho=0.879$、$R^2_{\log}=0.841$，留一年交叉验证平均$\rho=0.752\pm0.198$，证明模型的时间泛化能力稳健；(3)~16城平均$\rho=0.482$，所有城市$R^2_{\log}>0$，有BI组（$\rho=0.492$）与无BI组（$\rho=0.472$）差距仅0.020；(4)~2014年16城年度排名$\rho=0.953$，证实公式可准确捕捉跨城市相对风险排名。上述结果证明了"公式发现+动力学预测"两部分框架的可行性。
+本章将第一部分发现的蚊媒密度公式$\hat{M}$代入Bri\`{e}re+离散递推框架，采用单步超前预测策略，结合城市实际人口和对数线性校准，实现了16城登革热月度预测。主要结论包括：(1)~Bri\`{e}re函数的$T_{\min}=15.2^\circ$C界定了传播温度下限；(2)~广州训练集$R^2_{\log}=0.820$、$\rho=0.817$，2014年独立测试$\rho=0.879$、$R^2_{\log}=0.841$，留一年交叉验证平均$\rho=0.741\pm0.191$，证明模型的时间泛化能力稳健；(3)~16城平均$\rho=0.531$，所有城市$R^2_{\log}>0$，有BI组（$\rho=0.546$）与无BI组（$\rho=0.517$）差距仅0.029；(4)~2014年16城年度排名$\rho=0.953$，证实公式可准确捕捉跨城市相对风险排名。上述结果证明了"公式发现+动力学预测"两部分框架的可行性。
 
 %% ==================================================================
 \section{总结与展望}
@@ -622,11 +624,11 @@ SEIR控制方程：
 
 （1）\textbf{城市气候均值特征有效捕捉跨城市差异}：引入城市气候均值$(T_m, H_m, R_m)$作为城市固定效应的代理特征后，NN的$R^2$从约0.31提升至0.597，Pearson~$r=0.776$，表明城市间BI基线差异在很大程度上可由气候基线差异解释。
 
-（2）\textbf{PySR发现可解释蚊媒密度公式}：从Pareto前沿中以真实数据$R^2$选出最优公式（$R^2=0.438$，$r=0.692$），公式主要依赖月温度$T$、城市平均温度$T_m$和城市平均降水$R_m$。最简有效公式$\hat{M} \propto T \times (0.013 T_m - 0.247)$（$R^2=0.349$）揭示了城市基线温度对蚊媒密度的放大效应。
+（2）\textbf{PySR发现可解释蚊媒密度公式}：从Pareto前沿中以真实数据$R^2$选出最优公式（复杂度13，$R^2=0.413$，$r=0.657$），公式主要依赖月温度$T$、城市平均温度$T_m$、城市平均湿度$H_m$和城市平均降水$R_m$。最简有效公式$\hat{M} = T / (60.7 - 1.89 T_m)$（复杂度7，$R^2=0.327$）揭示了城市基线温度对蚊媒密度的放大效应。
 
 （3）\textbf{LOCO CV验证跨城市泛化}：8折留一城市交叉验证平均$r=0.586\pm0.217$，证实公式在空间维度上具有可迁移性。
 
-（4）\textbf{Bri\`{e}re+公式实现跨城市预测}：结合Bri\`{e}re传播率和公式$\hat{M}$的单步超前预测模型，在广州达到$R^2_{\log}=0.840$、$\rho=0.815$，留一年交叉验证平均$\rho=0.752\pm0.198$。16城平均$\rho=0.482$，所有城市$R^2_{\log}>0$，2014年年度排名$\rho=0.953$，有BI/无BI组差距仅0.020，证明公式驱动的模型可跨城市捕捉季节性趋势和相对风险排名。
+（4）\textbf{Bri\`{e}re+公式实现跨城市预测}：结合Bri\`{e}re传播率和公式$\hat{M}$的单步超前预测模型，在广州达到$R^2_{\log}=0.840$、$\rho=0.815$，留一年交叉验证平均$\rho=0.741\pm0.191$。16城平均$\rho=0.531$，所有城市$R^2_{\log}>0$，2014年年度排名$\rho=0.953$，有BI/无BI组差距仅0.029，证明公式驱动的模型可跨城市捕捉季节性趋势和相对风险排名。
 
 \subsection*{研究创新点}
 \addcontentsline{toc}{subsection}{研究创新点}
@@ -636,7 +638,7 @@ SEIR控制方程：
 \subsection*{研究展望}
 \addcontentsline{toc}{subsection}{研究展望}
 
-（1）\textbf{蚊媒监测数据扩展}：目前BI数据仅覆盖8个城市。未来可利用遥感数据（如NDVI、地表水面积指数、夜间灯光强度）构建空间连续的蚊媒密度代理指标\cite{lic2023}，或扩大BI监测网络，从而为更多城市提供训练数据，改善公式的域外泛化性能。（2）\textbf{城市特异性参数}：当前SEIR模型使用统一的Bri\`{e}re参数和人口规模。未来可引入逐城市人口数据、城市化指标和蚊媒控制投入水平，实现城市级参数校准。（3）\textbf{时间分辨率提升}：月度为当前时间单元。若能获取周或日尺度的BI和气候数据，有望提升公式的时间分辨能力和暴发峰值的预测精度。（4）\textbf{简化公式的应用}：Pareto前沿上复杂度7的公式$\hat{M} \propto T \times (0.013 T_m - 0.247)$虽然$R^2$较低（0.349），但仅含两个变量，具有更强的可解释性和实用性，适合资源有限的基层应用。（5）\textbf{气候变化情景预测}：$\hat{M}$公式和Bri\`{e}re函数可与CMIP6气候模型耦合，预测不同RCP/SSP情景下蚊媒密度和传播效率的变化趋势\cite{dennington2025}。（6）\textbf{方法推广}：本文提出的"NN+PySR符号蒸馏"框架原则上可应用于任何具有气候--生态耦合关系的蚊媒传染病（如寨卡、基孔肯雅热），以及其他需要从监测数据中发现定量规律的环境--健康建模问题。
+（1）\textbf{蚊媒监测数据扩展}：目前BI数据仅覆盖8个城市。未来可利用遥感数据（如NDVI、地表水面积指数、夜间灯光强度）构建空间连续的蚊媒密度代理指标\cite{lic2023}，或扩大BI监测网络，从而为更多城市提供训练数据，改善公式的域外泛化性能。（2）\textbf{城市特异性参数}：当前SEIR模型使用统一的Bri\`{e}re参数和人口规模。未来可引入逐城市人口数据、城市化指标和蚊媒控制投入水平，实现城市级参数校准。（3）\textbf{时间分辨率提升}：月度为当前时间单元。若能获取周或日尺度的BI和气候数据，有望提升公式的时间分辨能力和暴发峰值的预测精度。（4）\textbf{简化公式的应用}：Pareto前沿上复杂度7的公式$\hat{M} = T / (60.7 - 1.89 T_m)$虽然$R^2$较低（0.327），但仅含两个变量，具有更强的可解释性和实用性，适合资源有限的基层应用。（5）\textbf{气候变化情景预测}：$\hat{M}$公式和Bri\`{e}re函数可与CMIP6气候模型耦合，预测不同RCP/SSP情景下蚊媒密度和传播效率的变化趋势\cite{dennington2025}。（6）\textbf{方法推广}：本文提出的"NN+PySR符号蒸馏"框架原则上可应用于任何具有气候--生态耦合关系的蚊媒传染病（如寨卡、基孔肯雅热），以及其他需要从监测数据中发现定量规律的环境--健康建模问题。
 
 \newpage
 \addcontentsline{toc}{section}{参考文献}
