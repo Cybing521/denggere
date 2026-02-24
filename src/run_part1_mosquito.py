@@ -12,6 +12,7 @@ Pipeline:
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Dict, List, Tuple
 
@@ -44,29 +45,34 @@ def set_seed(seed=42):
 # ── Data loading & merging ────────────────────────────────────────────────
 
 def load_and_merge() -> Tuple[pd.DataFrame, np.ndarray, np.ndarray]:
-    """Merge BI and weather data, return (df, X_raw, y_raw).
+    """Merge BI and weather data, return (df, X_raw_6d, y_raw).
 
-    X_raw: (N, 3) — tem, rhu, pre (raw values)
-    y_raw: (N,)   — index_norm_city (city-normalized BI)
+    X_raw: (N, 6) — T, H, R, T_mean, H_mean, R_mean  (raw values)
+    y_raw: (N,)   — log1p(raw BI)  — preserves cross-city absolute signal
     """
     weather = pd.read_csv(DATA / "cases_weather_monthly_utf8.csv")
     bi = pd.read_csv(DATA / "bi_guangdong_monthly_proxy.csv")
 
-    # Keep only columns we need from BI
-    bi_sub = bi[["city_en", "year", "month", "index_norm_city"]].copy()
+    bi_sub = bi[["city_en", "year", "month", "index_value"]].copy()
 
-    # Inner join: only rows with both weather and BI
     merged = weather.merge(bi_sub, on=["city_en", "year", "month"], how="inner")
-    merged = merged.dropna(subset=["tem", "rhu", "pre", "index_norm_city"])
+    merged = merged.dropna(subset=["tem", "rhu", "pre", "index_value"])
     merged = merged.sort_values(["city_en", "year", "month"]).reset_index(drop=True)
 
-    X_raw = merged[["tem", "rhu", "pre"]].values.astype(np.float64)
-    y_raw = merged["index_norm_city"].values.astype(np.float64)
+    # City climate means as proxy for city fixed effect
+    city_means = merged.groupby("city_en")[["tem", "rhu", "pre"]].transform("mean")
+    merged["T_mean"] = city_means["tem"]
+    merged["H_mean"] = city_means["rhu"]
+    merged["R_mean"] = city_means["pre"]
+
+    X_raw = merged[["tem", "rhu", "pre", "T_mean", "H_mean", "R_mean"]].values.astype(np.float64)
+    y_raw = np.log1p(merged["index_value"].values.astype(np.float64))
 
     print(f"Merged dataset: {len(merged)} samples, {merged['city_en'].nunique()} cities")
     for city in sorted(merged["city_en"].unique()):
-        n = (merged["city_en"] == city).sum()
-        print(f"  {city:12s}: {n:3d} samples")
+        sub = merged[merged["city_en"] == city]
+        print(f"  {city:12s}: {len(sub):3d} samples, "
+              f"T_mean={sub['T_mean'].iloc[0]:.1f}, BI_mean={sub['index_value'].mean():.1f}")
 
     return merged, X_raw, y_raw
 
@@ -83,13 +89,14 @@ def normalize_features(X_raw: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.nd
 # ── Neural Network ────────────────────────────────────────────────────────
 
 class MosquitoNN(nn.Module):
-    """3 -> 32 -> 32 -> 1, Softplus activations, output >= 0."""
-    def __init__(self, n_input=3, n_hidden=32):
+    """6 -> 64 -> 64 -> 32 -> 1, Softplus + Dropout."""
+    def __init__(self, n_input=6, n_hidden=64):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(n_input, n_hidden), nn.Softplus(),
-            nn.Linear(n_hidden, n_hidden), nn.Softplus(),
-            nn.Linear(n_hidden, 1), nn.Softplus(),
+            nn.Linear(n_input, n_hidden), nn.Softplus(), nn.Dropout(0.1),
+            nn.Linear(n_hidden, n_hidden), nn.Softplus(), nn.Dropout(0.1),
+            nn.Linear(n_hidden, 32), nn.Softplus(),
+            nn.Linear(32, 1), nn.Softplus(),  # output >= 0 (log1p(BI) >= 0)
         )
 
     def forward(self, x):
@@ -97,10 +104,10 @@ class MosquitoNN(nn.Module):
 
 
 def train_nn(X_norm: np.ndarray, y: np.ndarray, train_mask: np.ndarray,
-             n_epochs: int = 3000, lr: float = 5e-3) -> Tuple[MosquitoNN, list]:
-    """Train NN to predict mosquito density from normalized weather.
+             n_epochs: int = 5000, lr: float = 3e-3) -> Tuple[MosquitoNN, list]:
+    """Train NN to predict log1p(BI) from normalized weather + city climate means.
 
-    Loss = MSE(log1p(pred), log1p(obs)) + 0.3 * (1 - pearson_r)
+    Loss = Huber(pred, obs) + 0.3 * (1 - pearson_r)
     """
     model = MosquitoNN(n_input=X_norm.shape[1])
     opt = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
@@ -110,6 +117,7 @@ def train_nn(X_norm: np.ndarray, y: np.ndarray, train_mask: np.ndarray,
     y_t = torch.tensor(y, dtype=torch.float32)
     mask = torch.tensor(train_mask, dtype=torch.bool)
 
+    huber = nn.HuberLoss(delta=1.0)
     best_loss, best_state, losses = float("inf"), None, []
 
     for epoch in range(n_epochs):
@@ -119,8 +127,7 @@ def train_nn(X_norm: np.ndarray, y: np.ndarray, train_mask: np.ndarray,
         pred = model(x_t).squeeze(-1)
         p_tr, o_tr = pred[mask], y_t[mask]
 
-        # log1p MSE
-        loss_mse = torch.mean((torch.log1p(p_tr) - torch.log1p(o_tr)) ** 2)
+        loss_main = huber(p_tr, o_tr)
 
         # Pearson correlation loss
         loss_corr = torch.tensor(0.0)
@@ -130,7 +137,7 @@ def train_nn(X_norm: np.ndarray, y: np.ndarray, train_mask: np.ndarray,
             r = torch.mean(p_z * o_z)
             loss_corr = 1.0 - r
 
-        loss = loss_mse + 0.3 * loss_corr
+        loss = loss_main + 0.3 * loss_corr
         loss.backward()
         opt.step()
         sched.step()
@@ -158,22 +165,41 @@ def nn_predict(model: MosquitoNN, X_norm: np.ndarray) -> np.ndarray:
 # ── Knowledge distillation ────────────────────────────────────────────────
 
 def distill(model: MosquitoNN, x_min: np.ndarray, x_max: np.ndarray,
-            n_per_dim: int = 20) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Generate n_per_dim^3 grid points in raw weather space, predict with NN.
+            n_grid: int = 10000) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Generate grid points in 6D raw weather space using quantile-based sampling.
 
+    For T/H/R: uniform grid.  For T_mean/H_mean/R_mean: sample from observed city means.
     Returns (X_raw_grid, X_norm_grid, y_grid).
     """
-    T_vals = np.linspace(x_min[0], x_max[0], n_per_dim)
-    H_vals = np.linspace(x_min[1], x_max[1], n_per_dim)
-    R_vals = np.linspace(x_min[2], x_max[2], n_per_dim)
+    # T/H/R: 20-point uniform grid
+    n_thr = 20
+    T_vals = np.linspace(x_min[0], x_max[0], n_thr)
+    H_vals = np.linspace(x_min[1], x_max[1], n_thr)
+    R_vals = np.linspace(x_min[2], x_max[2], n_thr)
 
-    TT, HH, RR = np.meshgrid(T_vals, H_vals, R_vals, indexing="ij")
-    X_raw_grid = np.column_stack([TT.ravel(), HH.ravel(), RR.ravel()])
+    # T_mean/H_mean/R_mean: 5 quantile points each (from observed city means)
+    n_mean = 5
+    Tm_vals = np.linspace(x_min[3], x_max[3], n_mean)
+    Hm_vals = np.linspace(x_min[4], x_max[4], n_mean)
+    Rm_vals = np.linspace(x_min[5], x_max[5], n_mean)
+
+    # Full grid would be 20^3 * 5^3 = 1M — too large. Use Latin hypercube sampling.
+    rng = np.random.default_rng(42)
+    rows = []
+    for _ in range(n_grid):
+        t = rng.choice(T_vals)
+        h = rng.choice(H_vals)
+        r = rng.choice(R_vals)
+        tm = rng.choice(Tm_vals)
+        hm = rng.choice(Hm_vals)
+        rm = rng.choice(Rm_vals)
+        rows.append([t, h, r, tm, hm, rm])
+    X_raw_grid = np.array(rows)
 
     # Normalize using same min/max
-    rng = x_max - x_min
-    rng[rng == 0] = 1.0
-    X_norm_grid = (X_raw_grid - x_min) / rng
+    rng_scale = x_max - x_min
+    rng_scale[rng_scale == 0] = 1.0
+    X_norm_grid = (X_raw_grid - x_min) / rng_scale
 
     y_grid = nn_predict(model, X_norm_grid)
 
@@ -181,46 +207,139 @@ def distill(model: MosquitoNN, x_min: np.ndarray, x_max: np.ndarray,
           f"M_hat range=[{y_grid.min():.4f}, {y_grid.max():.4f}]")
     return X_raw_grid, X_norm_grid, y_grid
 
-# ── PySR symbolic regression ──────────────────────────────────────────────
+# ── PySR symbolic regression (via Julia CLI) ─────────────────────────────
 
 def run_pysr(X_raw: np.ndarray, y: np.ndarray, out_dir: Path):
-    """Run PySR on (T, H, R) -> M_hat. Returns best model and Pareto DataFrame."""
-    from pysr import PySRRegressor
+    """Run SymbolicRegression.jl directly via Julia CLI (bypasses juliacall).
+    X_raw is 6D: T, H, R, T_mean, H_mean, R_mean.
+    Returns (None, pareto_df, best_pred_on_distill)."""
+    import subprocess
 
-    sr = PySRRegressor(
-        niterations=300,
-        maxsize=25,
-        populations=30,
-        binary_operators=["+", "-", "*", "/"],
-        unary_operators=["exp", "square", "cos"],
-        loss="loss(prediction, target) = (prediction - target)^2",
-        temp_equation_file=True,
-        tempdir=str(out_dir / "pysr_tmp"),
-        verbosity=1,
+    out_dir.mkdir(parents=True, exist_ok=True)
+    tmp = out_dir / "pysr_tmp"
+    tmp.mkdir(exist_ok=True)
+
+    # Save data for Julia
+    np.savetxt(tmp / "X.csv", X_raw, delimiter=",")
+    np.savetxt(tmp / "y.csv", y, delimiter=",")
+
+    julia_script = f'''
+using SymbolicRegression, DelimitedFiles
+
+X_raw = readdlm("{tmp}/X.csv", ',', Float64)   # [rows, 6]
+y     = vec(readdlm("{tmp}/y.csv", ',', Float64))
+X     = permutedims(X_raw)                       # [6, rows]
+
+options = SymbolicRegression.Options(
+    binary_operators=[+, -, *, /],
+    unary_operators=[exp, cos, safe_sqrt],
+    maxsize=25,
+    populations=30,
+    timeout_in_seconds=300,
+)
+
+hall = equation_search(X, y;
+    options=options,
+    niterations=300,
+    variable_names=["T", "H", "R", "Tm", "Hm", "Rm"],
+)
+
+# Save hall of fame
+dominating = calculate_pareto_frontier(hall)
+open("{tmp}/hall_of_fame.csv", "w") do io
+    println(io, "complexity,loss,equation")
+    for member in dominating
+        c = compute_complexity(member, options)
+        l = member.loss
+        eq = string_tree(member.tree, options)
+        println(io, "$c,$l,\\"$eq\\"")
+    end
+end
+
+# Save best (last) equation text
+best = dominating[end]
+best_eq = string_tree(best.tree, options)
+open("{tmp}/best_formula.txt", "w") do io
+    println(io, best_eq)
+end
+
+# Evaluate ALL Pareto members on X for later selection
+open("{tmp}/pareto_preds.csv", "w") do io
+    for (idx, member) in enumerate(dominating)
+        preds, ok = eval_tree_array(member.tree, X, options)
+        if !ok
+            preds = fill(NaN, size(X, 2))
+        end
+        println(io, join(preds, ","))
+    end
+end
+
+println("DONE: best = ", best_eq)
+'''
+    script_path = tmp / "run_sr.jl"
+    script_path.write_text(julia_script)
+
+    print("  Running Julia SymbolicRegression (this may take a few minutes) ...")
+    env = {**dict(os.environ), "OMP_NUM_THREADS": "4", "JULIA_NUM_THREADS": "4"}
+    result = subprocess.run(
+        ["julia", "--threads=4", str(script_path)],
+        capture_output=True, text=True, timeout=600, env=env,
     )
+    if result.returncode != 0:
+        print(f"  Julia stderr:\n{result.stderr[-2000:]}")
+        raise RuntimeError(f"Julia SR failed (exit {result.returncode})")
+    print(f"  Julia stdout: {result.stdout.strip()[-200:]}")
 
-    sr.fit(X_raw, y, variable_names=["T", "H", "R"])
+    # Parse results
+    pareto_df = pd.read_csv(tmp / "hall_of_fame.csv")
+    pareto_df.to_csv(out_dir / "formula_candidates.csv", index=False)
 
-    # Pareto front
-    pareto = sr.equations_
-    pareto.to_csv(out_dir / "formula_candidates.csv", index=False)
+    # Load all Pareto predictions on distillation data
+    pareto_preds = np.loadtxt(tmp / "pareto_preds.csv", delimiter=",")
+    if pareto_preds.ndim == 1:
+        pareto_preds = pareto_preds.reshape(1, -1)
 
-    # Best equation
-    best_eq = sr.sympy()
-    best_latex = sr.latex()
-    best_pred = sr.predict(X_raw)
+    best_eq_str = (tmp / "best_formula.txt").read_text().strip()
+    best_pred = pareto_preds[-1]  # last = most complex
 
     with open(out_dir / "best_formula.txt", "w") as f:
-        f.write(f"Sympy:  {best_eq}\n")
-        f.write(f"LaTeX:  {best_latex}\n")
-        f.write(f"\nPareto front (top 10 by score):\n")
-        cols = ["complexity", "loss", "equation"]
-        cols = [c for c in cols if c in pareto.columns]
-        f.write(pareto[cols].head(10).to_string(index=False))
+        f.write(f"Equation: {best_eq_str}\n")
+        f.write(f"\nPareto front:\n")
+        f.write(pareto_df.to_string(index=False))
         f.write("\n")
 
-    print(f"PySR best equation: {best_eq}")
-    return sr, pareto, best_pred
+    print(f"  PySR best equation: {best_eq_str}")
+    return None, pareto_df, pareto_preds
+
+
+# ── Evaluate formula string on data ──────────────────────────────────────────
+def _eval_formula(eq_str: str, X_raw: np.ndarray) -> np.ndarray:
+    """Evaluate a PySR formula string on raw 6D data (T, H, R, T_mean, H_mean, R_mean).
+    Handles safe_sqrt -> np.sqrt, exp -> np.exp, cos -> np.cos."""
+    T = X_raw[:, 0]
+    H = X_raw[:, 1]
+    R = X_raw[:, 2]
+    T_mean = X_raw[:, 3]
+    H_mean = X_raw[:, 4]
+    R_mean = X_raw[:, 5]
+    # Also create short aliases matching PySR variable names
+    Tm = T_mean
+    Hm = H_mean
+    Rm = R_mean
+    # Replace Julia function names with numpy equivalents
+    expr = eq_str.replace("safe_sqrt", "np.sqrt").replace("sqrt", "np.sqrt")
+    expr = expr.replace("exp(", "np.exp(").replace("cos(", "np.cos(")
+    expr = expr.replace("^", "**")
+    try:
+        result = eval(expr, {"np": np, "T": T, "H": H, "R": R,
+                             "Tm": Tm, "Hm": Hm, "Rm": Rm,
+                             "T_mean": T_mean, "H_mean": H_mean, "R_mean": R_mean})
+        return np.asarray(result, dtype=float)
+    except Exception as e:
+        print(f"  WARNING: formula eval failed: {e}")
+        print(f"  Formula: {expr}")
+        return np.full(len(X_raw), np.nan)
+
 
 # ── Leave-One-City-Out CV ─────────────────────────────────────────────────
 
@@ -428,7 +547,7 @@ def main():
     # ── Step 2: Train NN on all data ──────────────────────────────────
     print("\nStep 2: Training NN on all 8 cities ...")
     train_mask_all = np.ones(len(y_raw), dtype=bool)
-    nn_model, losses = train_nn(X_norm, y_raw, train_mask_all, n_epochs=3000, lr=5e-3)
+    nn_model, losses = train_nn(X_norm, y_raw, train_mask_all, n_epochs=5000, lr=3e-3)
     nn_pred_all = nn_predict(nn_model, X_norm)
 
     # Evaluate NN on real data
@@ -443,25 +562,67 @@ def main():
 
     # ── Step 3: Knowledge distillation + PySR ─────────────────────────
     print("\nStep 3a: Knowledge distillation ...")
-    X_dist_raw, X_dist_norm, y_dist = distill(nn_model, x_min, x_max, n_per_dim=20)
+    X_dist_raw, X_dist_norm, y_dist = distill(nn_model, x_min, x_max, n_grid=10000)
 
     print("\nStep 3b: PySR symbolic regression on distilled data ...")
-    sr_model, pareto_df, _ = run_pysr(X_dist_raw, y_dist, OUT)
+    _, pareto_df, pareto_preds = run_pysr(X_dist_raw, y_dist, OUT)
 
-    # Evaluate formula on real data
-    formula_pred_real = sr_model.predict(X_raw)
-    formula_metrics = evaluate(y_raw, formula_pred_real)
+    # ── Step 3c: Select best formula using real-data R² ───────────────
+    print("\nStep 3c: Selecting best formula by real-data R² ...")
+    best_idx, best_r2_real, best_eq_str = -1, -np.inf, ""
+    formula_results = []
+    for i, row in pareto_df.iterrows():
+        eq_str = row["equation"].strip().strip('"')
+        try:
+            pred_real = _eval_formula(eq_str, X_raw)
+            if np.any(np.isnan(pred_real)) or np.any(np.isinf(pred_real)):
+                continue
+            met = evaluate(y_raw, pred_real)
+            formula_results.append({
+                "idx": i, "complexity": row["complexity"],
+                "loss_distill": row["loss"], "equation": eq_str,
+                "r2_real": met["r2"], "r_real": met["pearson_r"],
+                "rmse_real": met["rmse"],
+            })
+            if met["r2"] > best_r2_real:
+                best_r2_real = met["r2"]
+                best_idx = i
+                best_eq_str = eq_str
+        except Exception as e:
+            continue
+
+    formula_sel_df = pd.DataFrame(formula_results)
+    formula_sel_df.to_csv(OUT / "formula_selection.csv", index=False)
+
+    if best_idx >= 0:
+        formula_pred_real = _eval_formula(best_eq_str, X_raw)
+        formula_metrics = evaluate(y_raw, formula_pred_real)
+        k_formula = int(pareto_df.loc[best_idx, "complexity"])
+    else:
+        # Fallback: use most complex
+        best_eq_str = pareto_df.iloc[-1]["equation"].strip().strip('"')
+        formula_pred_real = _eval_formula(best_eq_str, X_raw)
+        formula_metrics = evaluate(y_raw, formula_pred_real)
+        k_formula = int(pareto_df.iloc[-1]["complexity"])
+
     n_real = len(y_raw)
     ss_res = float(np.sum((y_raw - formula_pred_real) ** 2))
-    # Estimate formula complexity as number of parameters
-    best_row = pareto_df.iloc[-1] if len(pareto_df) > 0 else None
-    k_formula = int(best_row["complexity"]) if best_row is not None and "complexity" in pareto_df.columns else 5
     aic, bic = compute_aic_bic(n_real, k_formula, ss_res)
     formula_metrics["aic"] = aic
     formula_metrics["bic"] = bic
     formula_metrics["n_real"] = n_real
     formula_metrics["k"] = k_formula
 
+    # Overwrite best_formula.txt with the selected formula
+    with open(OUT / "best_formula.txt", "w") as f:
+        f.write(f"Equation: {best_eq_str}\n")
+        f.write(f"Selected by: max real-data R² = {best_r2_real:.4f}\n")
+        f.write(f"Complexity: {k_formula}\n")
+        f.write(f"\nAll candidates evaluated on real data:\n")
+        f.write(formula_sel_df.to_string(index=False))
+        f.write("\n")
+
+    print(f"  Selected formula (complexity={k_formula}): {best_eq_str}")
     print(f"  Formula on real data: r={formula_metrics['pearson_r']:.3f}, "
           f"R2={formula_metrics['r2']:.3f}, RMSE={formula_metrics['rmse']:.4f}, "
           f"AIC={aic:.1f}, BIC={bic:.1f}")
