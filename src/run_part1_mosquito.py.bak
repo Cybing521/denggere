@@ -48,11 +48,7 @@ def load_and_merge() -> Tuple[pd.DataFrame, np.ndarray, np.ndarray]:
     """Merge BI and weather data, return (df, X_raw_6d, y_raw).
 
     X_raw: (N, 6) — T, H, R, T_mean, H_mean, R_mean  (raw values)
-    y_raw: (N,)   — log1p(BI_relative)  — city-normalized for cross-city generalization
-
-    Key improvement: BI is normalized within each city (BI / city_mean) so the NN
-    learns the *seasonal shape* rather than absolute BI level. This eliminates the
-    5.9x inter-city BI scale difference that caused LOCO CV failure.
+    y_raw: (N,)   — log1p(raw BI)  — preserves cross-city absolute signal
     """
     weather = pd.read_csv(DATA / "cases_weather_monthly_utf8.csv")
     bi = pd.read_csv(DATA / "bi_guangdong_monthly_proxy.csv")
@@ -69,21 +65,14 @@ def load_and_merge() -> Tuple[pd.DataFrame, np.ndarray, np.ndarray]:
     merged["H_mean"] = city_means["rhu"]
     merged["R_mean"] = city_means["pre"]
 
-    # City-normalize BI: BI_rel = BI / city_mean_BI
-    # This removes inter-city scale differences while preserving seasonal patterns
-    city_bi_mean = merged.groupby("city_en")["index_value"].transform("mean")
-    merged["bi_city_mean"] = city_bi_mean
-    merged["bi_relative"] = merged["index_value"] / (city_bi_mean + 1e-6)
-
     X_raw = merged[["tem", "rhu", "pre", "T_mean", "H_mean", "R_mean"]].values.astype(np.float64)
-    y_raw = np.log1p(merged["bi_relative"].values.astype(np.float64))
+    y_raw = np.log1p(merged["index_value"].values.astype(np.float64))
 
     print(f"Merged dataset: {len(merged)} samples, {merged['city_en'].nunique()} cities")
     for city in sorted(merged["city_en"].unique()):
         sub = merged[merged["city_en"] == city]
         print(f"  {city:12s}: {len(sub):3d} samples, "
-              f"T_mean={sub['T_mean'].iloc[0]:.1f}, BI_mean={sub['index_value'].mean():.1f}, "
-              f"BI_rel=[{sub['bi_relative'].min():.2f}, {sub['bi_relative'].max():.2f}]")
+              f"T_mean={sub['T_mean'].iloc[0]:.1f}, BI_mean={sub['index_value'].mean():.1f}")
 
     return merged, X_raw, y_raw
 
@@ -356,34 +345,16 @@ def _eval_formula(eq_str: str, X_raw: np.ndarray) -> np.ndarray:
 
 def loco_cv(df_merged: pd.DataFrame, X_norm: np.ndarray, y: np.ndarray,
             cities: list) -> pd.DataFrame:
-    """8-fold LOCO CV at NN level. Returns DataFrame with per-city metrics.
-
-    Since y is log1p(BI_relative) where BI_relative = BI / city_mean,
-    the test city's BI_mean is unknown at test time. We use the global
-    mean of training cities' BI_mean as a proxy — this tests whether the
-    NN can generalize the *seasonal shape* to unseen cities.
-    """
+    """8-fold LOCO CV at NN level. Returns DataFrame with per-city metrics."""
     rows = []
     for test_city in cities:
         mask_train = df_merged["city_en"].values != test_city
         mask_test = ~mask_train
 
-        # Recompute y for LOCO: test city uses training-set global BI mean
-        # (simulates not knowing the test city's baseline BI level)
-        train_bi_means = df_merged[mask_train].groupby("city_en")["bi_city_mean"].first()
-        global_bi_mean = train_bi_means.mean()
-
-        # Recompute test city's relative BI using global mean
-        test_bi_raw = df_merged.loc[mask_test, "index_value"].values
-        test_bi_rel = test_bi_raw / (global_bi_mean + 1e-6)
-        y_test_adjusted = np.log1p(test_bi_rel)
-
         model_cv, _ = train_nn(X_norm, y, mask_train, n_epochs=2000, lr=5e-3)
         pred_cv = nn_predict(model_cv, X_norm)
 
-        # For test evaluation: compare predicted relative BI shape vs actual shape
-        # Use rank-based metrics (Spearman) which are scale-invariant
-        obs_test = y[mask_test]  # original city-normalized
+        obs_test = y[mask_test]
         pred_test = pred_cv[mask_test]
 
         met = evaluate(obs_test, pred_test)
@@ -391,11 +362,10 @@ def loco_cv(df_merged: pd.DataFrame, X_norm: np.ndarray, y: np.ndarray,
         met["n_test"] = int(mask_test.sum())
         rows.append(met)
         print(f"  LOCO {test_city:12s}: r={met['pearson_r']:.3f}, "
-              f"R2={met['r2']:.3f}, rho={met['spearman_rho']:.3f} (n={met['n_test']})")
+              f"R2={met['r2']:.3f}, RMSE={met['rmse']:.4f} (n={met['n_test']})")
 
     cv_df = pd.DataFrame(rows)
-    print(f"  LOCO mean: r={cv_df['pearson_r'].mean():.3f} +/- {cv_df['pearson_r'].std():.3f}, "
-          f"rho={cv_df['spearman_rho'].mean():.3f} +/- {cv_df['spearman_rho'].std():.3f}")
+    print(f"  LOCO mean: r={cv_df['pearson_r'].mean():.3f} +/- {cv_df['pearson_r'].std():.3f}")
     return cv_df
 
 # ── Evaluation ────────────────────────────────────────────────────────────
@@ -661,7 +631,6 @@ def main():
         f.write(f"Equation: {best_eq_str}\n")
         f.write(f"Selected by: max real-data R² = {best_r2_real:.4f}\n")
         f.write(f"Complexity: {k_formula}\n")
-        f.write(f"Target: log1p(BI_relative) where BI_relative = BI / city_mean_BI\n")
         f.write(f"\nAll candidates evaluated on real data:\n")
         f.write(formula_sel_df.to_string(index=False))
         f.write("\n")

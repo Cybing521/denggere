@@ -167,7 +167,7 @@ def seir_simulate(tem: np.ndarray, m_hat: np.ndarray,
     return np.maximum(pred, 0.0)
 
 
-# ── Optimization objective (single-city, for LOYO CV) ────────────────
+# ── Optimization objective (improved) ────────────────────────────────────
 
 def objective(params, tem, cases_obs, m_hat, N_h, train_mask, years):
     c, T_min, T_max, eta = params
@@ -193,6 +193,7 @@ def objective(params, tem, cases_obs, m_hat, N_h, train_mask, years):
                      huber_delta * (abs_diff - 0.5 * huber_delta))
     loss_main = float(np.mean(huber))
 
+    # Correlation penalty
     loss_corr = 0.0
     if np.std(pred_tr) > 1e-8 and np.std(obs_tr) > 1e-8:
         rho = spearmanr(obs_tr, pred_tr)[0]
@@ -203,62 +204,6 @@ def objective(params, tem, cases_obs, m_hat, N_h, train_mask, years):
         loss_main += 100.0
 
     return loss_main + 0.3 * loss_corr
-
-
-# ── Multi-city joint optimization ─────────────────────────────────────
-
-def objective_multi(params, city_data_list, train_year_exclude=2014):
-    """Joint objective: shared Brière (c, T_min, T_max) + per-city eta.
-
-    params = [c, T_min, T_max, eta_0, eta_1, ..., eta_{N-1}]
-    """
-    n_cities = len(city_data_list)
-    c, T_min, T_max = params[0], params[1], params[2]
-    etas = params[3:3 + n_cities]
-
-    if T_min >= T_max - 1.0:
-        return 1e12
-
-    total_loss = 0.0
-    n_valid = 0
-    for i, (tem, cases_obs, m_hat, N_h, yrs) in enumerate(city_data_list):
-        eta = etas[i]
-        train_mask = yrs != train_year_exclude
-        try:
-            pred = seir_simulate(tem, m_hat, c, T_min, T_max, eta, N_h,
-                                 years=yrs, cases_obs=cases_obs)
-        except Exception:
-            total_loss += 1e6
-            n_valid += 1
-            continue
-
-        obs_tr = cases_obs[train_mask]
-        pred_tr = np.maximum(pred[train_mask], 0.0)
-        if len(obs_tr) < 6:
-            continue
-
-        lo = np.log1p(obs_tr)
-        lp = np.log1p(pred_tr)
-
-        huber_delta = 1.5
-        diff = lo - lp
-        abs_diff = np.abs(diff)
-        huber = np.where(abs_diff <= huber_delta,
-                         0.5 * diff**2,
-                         huber_delta * (abs_diff - 0.5 * huber_delta))
-        loss_main = float(np.mean(huber))
-
-        loss_corr = 0.0
-        if np.std(pred_tr) > 1e-8 and np.std(obs_tr) > 1e-8:
-            rho = spearmanr(obs_tr, pred_tr)[0]
-            if np.isfinite(rho):
-                loss_corr = 1.0 - rho
-
-        weight = np.sqrt(np.sum(obs_tr) + 1.0)
-        total_loss += weight * (loss_main + 0.3 * loss_corr)
-        n_valid += 1
-
-    return total_loss / max(n_valid, 1)
 
 
 # ── Evaluation ────────────────────────────────────────────────────────────
@@ -468,117 +413,71 @@ def main():
     print("\nLoading M̂ formula from Part 1 ...")
     formula_model = load_formula()
 
-    # ── Two-stage optimization ─────────────────────────────────────
-    # Stage 1: Fit shared Brière (c, T_min, T_max) + eta on Guangzhou
-    # Stage 2: Fix Brière, fit per-city eta for each city
-    print("\nStage 1: Optimizing Brière on Guangzhou ...")
+    # ── Guangzhou: compute M_hat and optimize SEIR params ─────────────
+    print("\nOptimizing SEIR parameters on Guangzhou ...")
+    gz = weather[weather["city_en"] == "Guangzhou"].sort_values(["year", "month"]).copy()
+    gz = gz.reset_index(drop=True)
+
+    X_gz, gz = compute_city_features(gz)
+    m_hat_bi_gz = formula_model.predict_bi(X_gz)
+    m_hat_norm_gz = m_hat_bi_gz / (np.mean(m_hat_bi_gz) + 1e-8)
+    gz["m_hat_bi"] = m_hat_bi_gz
+    gz["m_hat_norm"] = m_hat_norm_gz
+
+    tem_gz = gz["tem"].values.astype(np.float64)
+    cases_gz = gz["cases"].values.astype(np.float64)
+    years_gz = gz["year"].values.astype(int)
     N_H_GZ = CITY_POP["Guangzhou"]
-    city_data = {}
-    for city in all_cities:
-        cdf = weather[weather["city_en"] == city].sort_values(["year", "month"]).copy()
-        cdf = cdf.reset_index(drop=True)
-        X_city, cdf = compute_city_features(cdf)
-        m_hat_bi = formula_model.predict_bi(X_city)
-        m_hat_norm = m_hat_bi / (np.mean(m_hat_bi) + 1e-8)
-        N_h = CITY_POP.get(city, N_H_GZ)
-        city_data[city] = {
-            "df": cdf, "tem": cdf["tem"].values.astype(np.float64),
-            "cases": cdf["cases"].values.astype(np.float64),
-            "m_hat_norm": m_hat_norm, "m_hat_bi": m_hat_bi,
-            "N_h": N_h, "years": cdf["year"].values.astype(int),
-        }
 
-    gz_d = city_data["Guangzhou"]
-    tem_gz = gz_d["tem"]
-    cases_gz = gz_d["cases"]
-    m_hat_norm_gz = gz_d["m_hat_norm"]
-    years_gz = gz_d["years"]
-    train_mask_gz = years_gz != 2014
+    train_mask = gz["year"].values != 2014
 
-    bounds_single = [
-        (1e-8, 1e-2), (10.0, 20.0), (32.0, 42.0), (0.01, 50.0),
+    bounds = [
+        (1e-8, 1e-2),
+        (10.0, 20.0),
+        (32.0, 42.0),
+        (0.01, 50.0),
     ]
-    result_gz = differential_evolution(
-        objective, bounds=bounds_single,
-        args=(tem_gz, cases_gz, m_hat_norm_gz, N_H_GZ, train_mask_gz, years_gz),
+
+    print("  Running differential evolution (4D, Huber+Spearman) ...")
+    result = differential_evolution(
+        objective, bounds=bounds,
+        args=(tem_gz, cases_gz, m_hat_norm_gz, N_H_GZ, train_mask, years_gz),
         maxiter=800, seed=42, tol=1e-9, polish=True, workers=1,
     )
-    c_opt, T_min_opt, T_max_opt, eta_gz = result_gz.x
-    T_opt_arr = np.linspace(T_min_opt, T_max_opt, 1000)
-    T_opt_val = T_opt_arr[np.argmax(briere(T_opt_arr, c_opt, T_min_opt, T_max_opt))]
-    print(f"  Brière: c={c_opt:.2e}, T_min={T_min_opt:.1f}, T_max={T_max_opt:.1f}, T_opt={T_opt_val:.1f}")
-    print(f"  GZ eta={eta_gz:.4f}")
 
-    # Stage 2: Fix Brière, fit per-city eta via grid search
-    print("\nStage 2: Fitting per-city eta (fixed Brière) ...")
-    city_etas = {}
-    eta_candidates = np.logspace(-2, np.log10(50), 80)
-    for city in all_cities:
-        cd = city_data[city]
-        non2014 = cd["years"] != 2014
-        best_loss, best_eta = 1e12, 1.0
-        for eta_try in eta_candidates:
-            try:
-                pred = seir_simulate(cd["tem"], cd["m_hat_norm"], c_opt, T_min_opt, T_max_opt,
-                                     eta_try, cd["N_h"], years=cd["years"], cases_obs=cd["cases"])
-                obs_tr = cd["cases"][non2014]
-                pred_tr = np.maximum(pred[non2014], 0.0)
-                lo = np.log1p(obs_tr)
-                lp = np.log1p(pred_tr)
-                loss = float(np.mean((lo - lp)**2))
-                if np.std(pred_tr) > 1e-8 and np.std(obs_tr) > 1e-8:
-                    rho = spearmanr(obs_tr, pred_tr)[0]
-                    if np.isfinite(rho):
-                        loss += 0.3 * (1.0 - rho)
-                if loss < best_loss:
-                    best_loss = loss
-                    best_eta = eta_try
-            except Exception:
-                continue
-        city_etas[city] = best_eta
+    c_opt, T_min_opt, T_max_opt, eta_opt = result.x
+    T_opt = np.linspace(T_min_opt, T_max_opt, 1000)
+    T_opt_val = T_opt[np.argmax(briere(T_opt, c_opt, T_min_opt, T_max_opt))]
+    print(f"  Optimal: c={c_opt:.2e}, T_min={T_min_opt:.1f}, T_max={T_max_opt:.1f}, "
+          f"eta={eta_opt:.4f}, T_opt={T_opt_val:.1f}")
 
-    print(f"  Per-city eta range: [{min(city_etas.values()):.4f}, {max(city_etas.values()):.4f}]")
-    for city in all_cities:
-        print(f"    {city:12s}: eta={city_etas[city]:.4f}")
-
-    # ── Guangzhou evaluation ──────────────────────────────────────────
-    gz = gz_d["df"].copy()
-    pred_gz = seir_simulate(tem_gz, m_hat_norm_gz, c_opt, T_min_opt, T_max_opt, eta_gz, N_H_GZ,
+    pred_gz = seir_simulate(tem_gz, m_hat_norm_gz, c_opt, T_min_opt, T_max_opt, eta_opt, N_H_GZ,
                             years=years_gz, cases_obs=cases_gz)
     gz_met_all = evaluate_cases(cases_gz, pred_gz)
-    gz_met_train = evaluate_cases(cases_gz[train_mask_gz], pred_gz[train_mask_gz])
-    gz_met_2014 = evaluate_cases(cases_gz[~train_mask_gz], pred_gz[~train_mask_gz])
+    gz_met_train = evaluate_cases(cases_gz[train_mask], pred_gz[train_mask])
+    gz_met_2014 = evaluate_cases(cases_gz[~train_mask], pred_gz[~train_mask])
 
-    print(f"\n  GZ train:  ρ={gz_met_train['spearman_rho']:.3f}, R²_log={gz_met_train['r2_log']:.3f}")
+    print(f"  GZ train:  ρ={gz_met_train['spearman_rho']:.3f}, R²_log={gz_met_train['r2_log']:.3f}")
     print(f"  GZ 2014:   ρ={gz_met_2014['spearman_rho']:.3f}, R²_log={gz_met_2014['r2_log']:.3f}")
     print(f"  GZ all:    ρ={gz_met_all['spearman_rho']:.3f}, R²_log={gz_met_all['r2_log']:.3f}")
 
     pd.DataFrame([{
         "c": c_opt, "T_min": T_min_opt, "T_max": T_max_opt, "T_opt": T_opt_val,
-        "eta": eta_gz, "de_loss": result_gz.fun,
+        "eta": eta_opt, "de_loss": result.fun,
         **{f"gz_{k}": v for k, v in gz_met_all.items()},
     }]).to_csv(OUT / "seir_params.csv", index=False)
 
     gz["pred_cases"] = pred_gz
-    gz["m_hat_bi"] = gz_d["m_hat_bi"]
-    gz["m_hat_norm"] = m_hat_norm_gz
     gz["beta_prime"] = briere(tem_gz, c_opt, T_min_opt, T_max_opt)
     gz.to_csv(OUT / "guangzhou_fit.csv", index=False)
 
-    # Save per-city etas
-    eta_df = pd.DataFrame([{"city_en": c, "eta": city_etas[c]} for c in all_cities])
-    eta_df.to_csv(OUT / "per_city_etas.csv", index=False)
-
-    # ── Leave-One-Year-Out CV on Guangzhou (single-city objective) ────
+    # ── Leave-One-Year-Out CV on Guangzhou ────────────────────────────
     print("\nLeave-One-Year-Out CV on Guangzhou ...")
-    bounds_single = [
-        (1e-8, 1e-2), (10.0, 20.0), (32.0, 42.0), (0.01, 50.0),
-    ]
     cv_rows = []
-    for test_year in sorted(np.unique(years_gz)):
-        cv_train = years_gz != test_year
+    for test_year in sorted(gz["year"].unique()):
+        cv_train = gz["year"].values != test_year
         cv_res = differential_evolution(
-            objective, bounds=bounds_single,
+            objective, bounds=bounds,
             args=(tem_gz, cases_gz, m_hat_norm_gz, N_H_GZ, cv_train, years_gz),
             maxiter=300, seed=42, tol=1e-8, polish=True, workers=1,
         )
@@ -588,72 +487,71 @@ def main():
         if cv_test_mask.sum() > 0:
             met = evaluate_cases(cases_gz[cv_test_mask], cv_pred[cv_test_mask])
             met["year"] = test_year
-            # Add outbreak detection metric
-            obs_y = cases_gz[cv_test_mask]
-            pred_y = cv_pred[cv_test_mask]
-            met["obs_total"] = float(np.sum(obs_y))
-            met["obs_max"] = float(np.max(obs_y))
-            met["is_outbreak"] = float(np.sum(obs_y) > 50)
             cv_rows.append(met)
-            tag = "✓" if met["r2_log"] > 0.3 else ("~" if met["r2_log"] > 0 else "✗")
-            print(f"  {test_year}: ρ={met['spearman_rho']:.3f}, R²_log={met['r2_log']:.3f} {tag}  "
-                  f"(cases={met['obs_total']:.0f})")
+            print(f"  {test_year}: ρ={met['spearman_rho']:.3f}, R²_log={met['r2_log']:.3f}")
 
     cv_df = pd.DataFrame(cv_rows)
     cv_df.to_csv(OUT / "loyo_cv.csv", index=False)
+    print(f"  LOYO mean ρ={cv_df['spearman_rho'].mean():.3f} ± {cv_df['spearman_rho'].std():.3f}")
 
-    # Report separately for outbreak vs non-outbreak years
-    outbreak_mask = cv_df["is_outbreak"] == 1.0
-    if outbreak_mask.sum() > 0:
-        cv_outbreak = cv_df[outbreak_mask]
-        cv_quiet = cv_df[~outbreak_mask]
-        print(f"  LOYO outbreak years (n={len(cv_outbreak)}): "
-              f"ρ={cv_outbreak['spearman_rho'].mean():.3f} ± {cv_outbreak['spearman_rho'].std():.3f}")
-        if len(cv_quiet) > 0:
-            print(f"  LOYO quiet years   (n={len(cv_quiet)}): "
-                  f"ρ={cv_quiet['spearman_rho'].mean():.3f} ± {cv_quiet['spearman_rho'].std():.3f}")
-    print(f"  LOYO all years: ρ={cv_df['spearman_rho'].mean():.3f} ± {cv_df['spearman_rho'].std():.3f}")
+    # ── Transfer to 16 cities with per-city population + scaling ──────
+    print("\nTransferring to 16 cities (per-city pop + log-linear scaling) ...")
 
-    # ── Per-city predictions with per-city eta + per-city scaling ─────
-    print("\nGenerating per-city predictions (joint Brière + per-city eta + scaling) ...")
+    # Step 1: raw SEIR predictions for all cities
+    city_raw = {}
+    for city in all_cities:
+        cdf = weather[weather["city_en"] == city].sort_values(["year", "month"]).copy()
+        cdf = cdf.reset_index(drop=True)
+        X_city, cdf = compute_city_features(cdf)
+        m_hat_bi = formula_model.predict_bi(X_city)
+        m_hat_norm = m_hat_bi / (np.mean(m_hat_bi) + 1e-8)
+        N_h = CITY_POP.get(city, N_H_GZ)
+        city_years = cdf["year"].values.astype(int)
+        city_cases = cdf["cases"].values.astype(np.float64)
+        pred_raw = seir_simulate(
+            cdf["tem"].values.astype(np.float64),
+            m_hat_norm, c_opt, T_min_opt, T_max_opt, eta_opt, N_h,
+            years=city_years, cases_obs=city_cases
+        )
+        cdf["m_hat_bi"] = m_hat_bi
+        cdf["m_hat_norm"] = m_hat_norm
+        cdf["pred_raw"] = pred_raw
+        cdf["beta_prime"] = briere(cdf["tem"].values.astype(np.float64), c_opt, T_min_opt, T_max_opt)
+        city_raw[city] = cdf
 
+    # Step 2: log-linear scaling (fit on non-2014, non-Guangzhou data)
+    print("  Fitting log-linear scaling ...")
+    scale_data = []
+    for city in all_cities:
+        cdf = city_raw[city]
+        non2014 = cdf["year"] != 2014
+        obs_mean = cdf.loc[non2014, "cases"].mean() + 1e-3
+        pred_mean = cdf.loc[non2014, "pred_raw"].mean() + 1e-3
+        scale_data.append({"city_en": city, "obs_mean": obs_mean, "pred_mean": pred_mean})
+
+    scale_df = pd.DataFrame(scale_data)
+    lo_obs = np.log(scale_df["obs_mean"].values)
+    lo_pred = np.log(scale_df["pred_mean"].values)
+    # log(obs) = a + b * log(pred)
+    b_scale = np.cov(lo_obs, lo_pred)[0, 1] / (np.var(lo_pred) + 1e-12)
+    a_scale = np.mean(lo_obs) - b_scale * np.mean(lo_pred)
+    print(f"  Log-linear: log(obs) = {a_scale:.3f} + {b_scale:.3f} * log(pred)")
+
+    # Step 3: apply scaling and evaluate
     city_tables = []
     city_metrics = []
     for city in all_cities:
-        cd = city_data[city]
-        eta_c = city_etas[city]
-        pred_raw = seir_simulate(
-            cd["tem"], cd["m_hat_norm"], c_opt, T_min_opt, T_max_opt, eta_c, cd["N_h"],
-            years=cd["years"], cases_obs=cd["cases"]
-        )
-
-        # Per-city scaling: fit on non-2014 data
-        non2014 = cd["years"] != 2014
-        obs_train = cd["cases"][non2014]
-        pred_train = pred_raw[non2014]
-
-        # Log-space ratio scaling (robust)
-        obs_m = np.mean(obs_train) + 1e-3
-        pred_m = np.mean(pred_train) + 1e-3
-        scale = obs_m / pred_m
-        pred_scaled = np.maximum(pred_raw * scale, 0.0)
-
-        cdf = cd["df"].copy()
-        cdf["m_hat_bi"] = cd["m_hat_bi"]
-        cdf["m_hat_norm"] = cd["m_hat_norm"]
-        cdf["pred_raw"] = pred_raw
+        cdf = city_raw[city].copy()
+        pred_raw = cdf["pred_raw"].values
+        log_scaled = a_scale + b_scale * np.log(pred_raw + 1e-3)
+        pred_scaled = np.maximum(np.exp(log_scaled), 0.0)
         cdf["pred_cases"] = pred_scaled
-        cdf["beta_prime"] = briere(cd["tem"], c_opt, T_min_opt, T_max_opt)
-        cdf["eta"] = eta_c
-        cdf["scale_factor"] = scale
         city_tables.append(cdf)
 
-        met = evaluate_cases(cd["cases"], pred_scaled)
+        met = evaluate_cases(cdf["cases"].values, pred_scaled)
         met["city_en"] = city
         met["has_bi"] = city in bi_cities
-        met["N_h"] = cd["N_h"]
-        met["eta"] = eta_c
-        met["scale"] = scale
+        met["N_h"] = CITY_POP.get(city, N_H_GZ)
         city_metrics.append(met)
 
     transfer_monthly = pd.concat(city_tables, ignore_index=True)
