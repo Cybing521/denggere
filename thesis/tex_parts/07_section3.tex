@@ -1,21 +1,66 @@
 %% ==================================================================
-\section{第二部分：多城市迁移与外部验证}
+\section{第二部分：Bri\`{e}re-SEIR动力学建模与多城市验证}
 \label{sec:part2}
 %% ==================================================================
 
 \subsection{引言}
 
-第一部分的研究已在广州单城市尺度上建立了基于Bri\`{e}re函数的登革热传播效率模型，并通过PySR符号回归发现了融合温度、降水与湿度的蚊媒适宜度公式$\hat{M}$。然而，单城市模型的实际公共卫生价值在很大程度上取决于其能否推广至其他城市——即空间可迁移性（spatial transferability）。如果模型仅在训练城市表现良好而无法外推，则其理论意义和应用前景都将大打折扣。
-
-空间迁移面临的核心挑战在于：不同城市在人口规模、城市化水平、蚊媒基线密度、公共卫生防控力度以及人口流动模式等方面存在显著差异\cite{lai2015,brady2013}。这些非气候因素对登革热发病率的影响可能与气候因素同等重要甚至更为突出。因此，简单地将广州模型的全部参数直接应用于其他城市是不合理的。需要一种既能保留物理机制的跨城市一致性、又能适应各城市特异性条件的迁移策略。
-
-本章的研究目标有三：（1）设计并实施两阶段迁移策略，将Bri\`{e}re传播率模型从广州推广至广东省16个地级市，系统评估其空间泛化能力；（2）利用2020--2026年广州新采集的布雷图指数（BI）监测数据，对模型进行完全独立的时间外验证，检验其时间泛化能力；（3）通过逐城市分析和分组比较，深入探讨模型在不同发病水平城市中的表现差异及其流行病学含义。
-
-空间迁移验证和时间外验证分别从空间维度和时间维度检验模型的泛化能力，二者互为补充。空间迁移回答的是"同一时期内，模型能否适用于不同地理环境"的问题；时间外验证回答的是"在训练期之外的未来时段，模型是否仍然有效"的问题。只有同时通过这两项检验，才能为模型的实际应用提供充分的信心。
+第一部分通过符号回归发现了融合温度、湿度与降水的蚊媒密度公式$\hat{M}$。本章在此基础上，构建基于Bri\`{e}re温度响应函数的SEIR动力学模型，首先在广州市完成参数估计和拟合验证，随后通过两阶段迁移策略推广至广东省16个地级市，并利用2020--2026年独立数据进行时间外验证。
 
 \subsection{数据与方法}
 
+\subsubsection{广州市数据}
+\label{sec:p2-gz-data}
+
+广州市（23.13°N, 113.26°E）位于广东省中南部，属南亚热带季风气候，年均气温21.4--22.6°C，年均降水量1600--1900\,mm。全市常住人口约1,426万人（$N_h = 1.426 \times 10^7$）。本研究使用广州市2005--2019年月度登革热报告病例数据（180个月度观测值）和对应的月度气象数据（温度$T$、湿度$H$、降水$R$）。病例数据呈极端右偏分布：64.4\%的月份报告病例数$\leq$5例，而2014年暴发年全年累计报告37,382例。图\ref{fig:gz-overview}展示了广州市病例与气象变量的时间序列。
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{../figures/fig0a_guangzhou_data_overview.png}
+\caption{广州市2005--2019年月度登革热病例数（对数坐标）及气象变量（温度、湿度、降水）时间序列。}
+\label{fig:gz-overview}
+\end{figure}图\ref{fig:gz-climate}展示了广州市气候与病例的时间序列。
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{../figures/fig0a_guangzhou_climate_cases.png}
+\caption{广州市2005--2019年月度气候变量与登革热病例时间序列。从上到下：病例数（对数坐标）、温度、湿度、降水。}
+\label{fig:gz-climate}
+\end{figure}
+
+\subsubsection{Bri\`{e}re传播率模型}
+\label{sec:p2-briere}
+
+传播率$\beta$的温度依赖性采用Bri\`{e}re函数\cite{briere1999}建模：
+\begin{equation}
+\label{eq:briere}
+\beta'(T) = c \cdot T \cdot (T - T_{\min}) \cdot \sqrt{T_{\max} - T}, \quad T_{\min} \leq T \leq T_{\max}
+\end{equation}
+其中$c$为形状系数，$T_{\min}$为发育零点温度（低于此温度蚊虫停止发育），$T_{\max}$为热致死温度（高于此温度蚊虫死亡）。最适温度$T_{\text{opt}}$由$\beta'(T)$的极值点确定。选择Bri\`{e}re函数的理由在于：（1）其不对称单峰形态与蚊媒传播的温度响应实验数据高度吻合\cite{mordecai2017}；（2）三个参数均具有明确的昆虫学含义；（3）仅需3个自由参数，在180个月度样本的小样本条件下不易过拟合。
+
+\subsubsection{SEIR离散时间预测框架}
+\label{sec:p2-seir}
+
+采用离散时间SEIR仓室模型，以月为时间步长：
+\begin{equation}
+\label{eq:seir-discrete}
+\begin{aligned}
+\Delta E_t &= \beta'(T_t) \cdot \hat{M}_t \cdot S_t / N_h + \eta - \sigma E_t \\
+\Delta I_t &= \sigma E_t - \gamma I_t \\
+C_t &= \sigma E_t
+\end{aligned}
+\end{equation}
+其中$\beta'(T_t)$为Bri\`{e}re温度响应函数，$\hat{M}_t$为第一部分发现的蚊媒密度公式，$S_t$为易感人群池，$\eta$为背景输入率（捕捉非气候因素的恒定输入），$\sigma = 1/7$天$^{-1}$为潜伏期倒数，$\gamma = 1/7$天$^{-1}$为恢复率。$C_t$为模型预测的月度新增病例数。
+
+参数优化采用差分进化（Differential Evolution, DE）全局优化算法，目标函数为Spearman~$\rho$（最大化预测序列与观测序列的排名相关性）。优化参数包括Bri\`{e}re三参数$(c, T_{\min}, T_{\max})$和广州$\eta$。
+
+\subsubsection{评估指标体系}
+\label{sec:p2-metrics}
+
+模型评估采用多维度指标体系：（1）Spearman~$\rho$衡量排名一致性；（2）对数$R^2$（$R^2_{\log}$）衡量对数空间拟合优度；（3）加权绝对百分比误差（WAPE）衡量量级准确性；（4）留一年交叉验证（LOYO CV）评估时间泛化能力。
+
 \subsubsection{16城数据概况}
+\label{sec:p2-16city-data}
 
 研究涵盖广东省16个地级市：广州、佛山、中山、江门、珠海、深圳、清远、阳江、东莞、肇庆、汕头、湛江、潮州、茂名、揭阳和惠州。数据时间范围为2005--2019年，月度分辨率，共计180个月$\times$16城$=$2880个城市-月观测值。气象数据（日均温度、降水量、相对湿度）来源于NOAA全球地面观测日报（GSOD），按月聚合为月均温度、月累计降水和月均相对湿度。登革热病例数据来源于中国疾病预防控制中心法定传染病报告系统。
 
@@ -79,6 +124,57 @@ $\eta$的校准采用80点对数均匀网格搜索（log-uniform grid search）�
 原始BI数据的时间粒度不完全统一：部分年份为月度数据，部分年份为旬度（每10天）或周度数据。为保持与模型输出的一致性，对非月度数据按月聚合取均值。聚合后的月度BI序列用于与Bri\`{e}re~$\beta'(T)$和PySR~$\hat{M}$进行相关性分析。
 
 \subsection{结果}
+
+\subsubsection{Bri\`{e}re传播率参数}
+\label{sec:p2-res-briere}
+
+差分进化算法在广州2005--2019年数据上优化得到的Bri\`{e}re函数参数为：尺度系数$c = 7.15 \times 10^{-4}$，发育温度下限$T_{\min} = 15.1$°C，发育温度上限$T_{\max} = 42.0$°C。由此计算的最优传播温度为$T_{\text{opt}} = 35.5$°C，背景输入率$\eta = 0.709$。
+
+$T_{\min} = 15.1$°C落在文献报道的白纹伊蚊发育温度下限范围（14--16°C）之内\cite{mordecai2017,brady2013}。$T_{\max} = 42.0$°C略高于部分实验室报道的上限（约38--40°C），可能因为广州月均温极少超过35°C，高温端数据约束较弱。$T_{\text{opt}} = 35.5$°C高于Mordecai等\cite{mordecai2019}报道的最优传播温度（约29°C），但两者不具有直接可比性——Mordecai等的估计基于$R_0$的多个组分，而本研究的$\beta'(T)$仅反映传播率的温度依赖性，蚊虫存活率等因素已部分被$\hat{M}$所捕捉。
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.7\textwidth]{../figures/fig5_briere_curve.png}
+\caption{Bri\`{e}re传播率函数$\beta'(T)$曲线。$T_{\min}=15.1^\circ$C, $T_{\max}=42.0^\circ$C, $T_{\text{opt}}=35.5^\circ$C。}
+\label{fig:briere-curve}
+\end{figure}
+
+\subsubsection{广州拟合与交叉验证}
+\label{sec:p2-res-gz}
+
+表\ref{tab:gz-metrics}汇总了Bri\`{e}re模型在广州市不同评估场景下的预测性能。
+
+\begin{table}[H]
+\centering
+\caption{Bri\`{e}re模型在广州市的预测性能}
+\label{tab:gz-metrics}
+\begin{tabular}{lcccc}
+\toprule
+评估场景 & Spearman $\rho$ & $R^2_{\log}$ & Pearson $r$ & WAPE \\
+\midrule
+全期拟合（2005--2019） & 0.814 & 0.851 & 0.714 & 0.679 \\
+LOYO CV 全部年份 & $0.740 \pm 0.185$ & $0.442 \pm 0.534$ & --- & --- \\
+LOYO CV 暴发年（病例$>$50） & $0.806 \pm 0.098$ & $0.660 \pm 0.218$ & --- & --- \\
+LOYO CV 低发年 & $0.561 \pm 0.218$ & --- & --- & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+全期拟合$\rho = 0.814$、$R^2_{\log} = 0.851$，表明模型能够较好地捕捉广州登革热的时序变化模式。LOYO CV中，暴发年份平均$\rho = 0.806$，性能接近全期拟合水平；低发年份$\rho = 0.561$，性能下降，因为低发年份信噪比极低，传播主要由随机输入事件驱动。
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{../figures/fig6_guangzhou_fit.png}
+\caption{广州市2005--2019年月度病例观测值与Bri\`{e}re模型预测值对比。}
+\label{fig:gz-fit}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.75\textwidth]{../figures/fig7_loyo_cv.png}
+\caption{广州市留一年交叉验证（LOYO CV）各年Spearman $\rho$。}
+\label{fig:loyo-cv}
+\end{figure}
 
 \subsubsection{逐城市$\eta$校准结果}
 
@@ -256,7 +352,7 @@ MOI vs $\beta'(T)$ & 0.860 & 0.839 \\
 
 \textbf{逐年分析。}6个验证年中，4年的$r > 0.8$（2020: $r = 0.965$，2022: $r = 0.967$，2023: $r = 0.844$，2024: $r = 0.926$），表现优异。2021年（$r = 0.620$）和2025年（$r = 0.655$）相关性偏低，原因各异：2021年正值COVID-19严格管控期，大规模社区消杀和人员流动限制显著压低了BI水平，破坏了温度与蚊媒密度之间的正常关联；2025年整体BI水平偏低，数据变异范围收窄，相关系数对噪声更为敏感。
 
-\textbf{MOI交叉验证。}MOI与BI的相关性极高（$r = 0.875$），证实了两种蚊媒监测指标的一致性。MOI与$\beta'(T)$的相关性（$r = 0.860$）甚至略高于BI与$\beta'(T)$的相关性（$r = 0.782$），这可能是因为MOI基于成蚊产卵活跃度，比BI（基于幼虫容器阳性率）更直接地反映成蚊的活动水平，而Bri\`{e}re函数描述的正是成蚊传播效率与温度的关系。
+\textbf{MOI交叉验证。}MOI与BI的相关性极高（$r = 0.875$），证实了两种蚊媒监测指标的一致性。MOI与$\beta'(T)$的相关性（$r = 0.860$）甚至略高于BI与$\beta'(T)$的相关性（$r = 0.782$），这可能是因为MOI基于成蚊产卵活跃度，比BI（基于幼虫容器阳性率）更直接地反映成蚊的活动水平，而Bri\`{e}re函数描述的正是成蚊传播率与温度的关系。
 
 \textbf{COVID效应的量化。}新数据BI均值（2.67）仅为训练期BI均值（6.18）的43\%，这一显著下降可能反映了COVID-19防控措施对蚊媒环境的间接影响（如社区清洁运动、减少户外积水容器等）。尽管BI绝对水平大幅下降，$\beta'(T)$与BI的季节性相关仍高达$r = 0.920$，说明温度驱动的季节性模式是稳健的，不受BI绝对水平变化的影响。
 
