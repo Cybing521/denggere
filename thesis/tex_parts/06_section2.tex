@@ -25,13 +25,6 @@
 \includegraphics[width=0.95\textwidth]{../figures/fig0b_bi_distribution.png}
 \caption{6城BI数据描述。左：各城市BI箱线图；右：BI月度季节性模式（均值$\pm$标准差）。}
 \label{fig:bi-dist}
-\end{figure}图\ref{fig:bi-dist}展示了6城BI的分布特征和季节性模式。
-
-\begin{figure}[H]
-\centering
-\includegraphics[width=0.95\textwidth]{../figures/fig0b_bi_distribution.png}
-\caption{6城BI数据概况。左：各城市BI箱线图；中：月度BI季节性变化；右：BI与温度的散点关系。}
-\label{fig:bi-dist}
 \end{figure}
 
 \begin{table}[H]
@@ -134,18 +127,18 @@ PySR在Pareto前沿上输出了一系列候选公式，复杂度从3到25不等�
 \centering
 \caption{留一城市交叉验证（LOCO CV）结果}
 \label{tab:loco-cv}
-\begin{tabular}{lccccc}
+\begin{tabular}{lcccc}
 \toprule
-测试城市 & $n$ & Pearson $r$ & Spearman $\rho$ & $R^2$ & RMSE \\
+测试城市 & $n$ & Pearson $r$ & Spearman $\rho$ & RMSE \\
 \midrule
-东莞 & 24 & 0.754 & 0.669 & 0.503 & 0.172 \\
-广州 & 87 & 0.505 & 0.536 & 0.228 & 0.356 \\
-惠州 & 9 & 0.755 & 0.533 & 0.554 & 0.096 \\
-江门 & 36 & 0.559 & 0.524 & 0.309 & 0.240 \\
-茂名 & 18 & 0.467 & 0.416 & $-$0.498 & 0.118 \\
-汕头 & 44 & 0.542 & 0.381 & 0.117 & 0.247 \\
+东莞 & 24 & 0.754 & 0.669 & 0.172 \\
+广州 & 87 & 0.505 & 0.536 & 0.356 \\
+惠州 & 9 & 0.755 & 0.533 & 0.096 \\
+江门 & 36 & 0.559 & 0.524 & 0.240 \\
+茂名 & 18 & 0.467 & 0.416 & 0.118 \\
+汕头 & 44 & 0.542 & 0.381 & 0.247 \\
 \midrule
-\textbf{均值} & & \textbf{0.597} & \textbf{0.510} & \textbf{0.202} & \textbf{0.205} \\
+\textbf{均值} & & \textbf{0.597} & \textbf{0.510} & \textbf{0.205} \\
 \bottomrule
 \end{tabular}
 \end{table}
