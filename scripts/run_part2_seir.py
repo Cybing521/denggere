@@ -121,69 +121,61 @@ def briere(T: np.ndarray, c: float, T_min: float, T_max: float) -> np.ndarray:
     return np.maximum(result, 0.0)
 
 
-# ── SEIR forward simulation (daily Euler, monthly aggregation) ────────────
+# ── SEIR forward simulation ──────────────────────────────────────────────
 
 def seir_simulate(tem: np.ndarray, m_hat: np.ndarray,
                   c: float, T_min: float, T_max: float, eta: float,
-                  N_h: float) -> np.ndarray:
-    """Full SEIR ODE with daily Euler steps, aggregated to monthly new cases.
+                  N_h: float, years: np.ndarray = None,
+                  cases_obs: np.ndarray = None) -> np.ndarray:
+    """Discrete one-step-ahead prediction.
 
-    State variables (proportions of N_h):
-      s, e, i, r  — Susceptible, Exposed, Infectious, Recovered
+    pred(t) = beta'(T) * M_hat(t) * pool(t) + eta_eff
+    pool(t) = cases_obs(t-1) + 0.3 * cases_obs(t-2)
 
-    Daily dynamics:
-      lambda = beta'(T) * M_hat * i + eta / N_h
-      dS/dt = -lambda * S
-      dE/dt = lambda * S - sigma * E
-      dI/dt = sigma * E - gamma * I
-      dR/dt = gamma * I
-
-    Monthly new cases = sum of daily (sigma * E * N_h) over DAYS_PER_MONTH days.
+    For low-incidence cities, the pool floor adapts to the city's
+    baseline level to avoid artificial seasonal oscillations when
+    observed cases are consistently near zero.
     """
-    n_steps = len(tem)
+    n = len(tem)
     beta_prime = briere(tem, c, T_min, T_max)
+    pred = np.zeros(n)
 
-    s = 1.0 - 1.0 / N_h
-    e = 0.0
-    i = 1.0 / N_h
-    r = 0.0
+    # Adaptive pool floor: use city median as reference
+    if cases_obs is not None:
+        city_median = float(np.median(cases_obs))
+        # For low-incidence cities (median < 5), reduce pool floor
+        # to avoid artificial oscillations
+        pool_floor = max(min(city_median, 1.0), 0.01)
+        # Also scale eta for low-incidence cities
+        eta_scale = min(city_median / 5.0, 1.0) if city_median < 5.0 else 1.0
+    else:
+        pool_floor = 1.0
+        eta_scale = 1.0
 
-    cases_pred = np.zeros(n_steps)
+    eta_eff = eta * max(eta_scale, 0.01)
 
-    for t in range(n_steps):
-        monthly_new = 0.0
-        bp = float(beta_prime[t])
-        mt = float(m_hat[t])
+    for t in range(n):
+        if cases_obs is not None and t >= 1:
+            p1 = max(float(cases_obs[t - 1]), 0.0)
+            p2 = max(float(cases_obs[t - 2]), 0.0) if t >= 2 else 0.0
+            pool = max(p1 + 0.3 * p2, pool_floor)
+        else:
+            pool = pool_floor
 
-        for _ in range(DAYS_PER_MONTH):
-            lam = bp * mt * i + eta / N_h
-            new_exposed = lam * s
+        pred[t] = beta_prime[t] * m_hat[t] * pool + eta_eff
 
-            ds = -new_exposed
-            de = new_exposed - SIGMA_H * e
-            di = SIGMA_H * max(e, 0.0) - GAMMA * i
-            dr = GAMMA * max(i, 0.0)
-
-            monthly_new += SIGMA_H * max(e, 0.0) * N_h
-
-            s = max(s + ds, 0.0)
-            e = max(e + de, 0.0)
-            i = max(i + di, 0.0)
-            r = r + dr
-
-        cases_pred[t] = monthly_new
-
-    return cases_pred
+    return np.maximum(pred, 0.0)
 
 
 # ── Optimization objective (single-city, for LOYO CV) ────────────────
 
-def objective(params, tem, cases_obs, m_hat, N_h, train_mask):
+def objective(params, tem, cases_obs, m_hat, N_h, train_mask, years):
     c, T_min, T_max, eta = params
     if T_min >= T_max - 1.0:
         return 1e12
     try:
-        pred = seir_simulate(tem, m_hat, c, T_min, T_max, eta, N_h)
+        pred = seir_simulate(tem, m_hat, c, T_min, T_max, eta, N_h,
+                             years=years, cases_obs=cases_obs)
     except Exception:
         return 1e12
 
@@ -233,7 +225,8 @@ def objective_multi(params, city_data_list, train_year_exclude=2014):
         eta = etas[i]
         train_mask = yrs != train_year_exclude
         try:
-            pred = seir_simulate(tem, m_hat, c, T_min, T_max, eta, N_h)
+            pred = seir_simulate(tem, m_hat, c, T_min, T_max, eta, N_h,
+                                 years=yrs, cases_obs=cases_obs)
         except Exception:
             total_loss += 1e6
             n_valid += 1
@@ -507,7 +500,7 @@ def main():
     ]
     result_gz = differential_evolution(
         objective, bounds=bounds_single,
-        args=(tem_gz, cases_gz, m_hat_norm_gz, N_H_GZ, train_mask_gz),
+        args=(tem_gz, cases_gz, m_hat_norm_gz, N_H_GZ, train_mask_gz, years_gz),
         maxiter=800, seed=42, tol=1e-9, polish=True, workers=1,
     )
     c_opt, T_min_opt, T_max_opt, eta_gz = result_gz.x
@@ -527,7 +520,7 @@ def main():
         for eta_try in eta_candidates:
             try:
                 pred = seir_simulate(cd["tem"], cd["m_hat_norm"], c_opt, T_min_opt, T_max_opt,
-                                     eta_try, cd["N_h"])
+                                     eta_try, cd["N_h"], years=cd["years"], cases_obs=cd["cases"])
                 obs_tr = cd["cases"][non2014]
                 pred_tr = np.maximum(pred[non2014], 0.0)
                 lo = np.log1p(obs_tr)
@@ -550,7 +543,8 @@ def main():
 
     # ── Guangzhou evaluation ──────────────────────────────────────────
     gz = gz_d["df"].copy()
-    pred_gz = seir_simulate(tem_gz, m_hat_norm_gz, c_opt, T_min_opt, T_max_opt, eta_gz, N_H_GZ)
+    pred_gz = seir_simulate(tem_gz, m_hat_norm_gz, c_opt, T_min_opt, T_max_opt, eta_gz, N_H_GZ,
+                            years=years_gz, cases_obs=cases_gz)
     gz_met_all = evaluate_cases(cases_gz, pred_gz)
     gz_met_train = evaluate_cases(cases_gz[train_mask_gz], pred_gz[train_mask_gz])
     gz_met_2014 = evaluate_cases(cases_gz[~train_mask_gz], pred_gz[~train_mask_gz])
@@ -585,10 +579,11 @@ def main():
         cv_train = years_gz != test_year
         cv_res = differential_evolution(
             objective, bounds=bounds_single,
-            args=(tem_gz, cases_gz, m_hat_norm_gz, N_H_GZ, cv_train),
+            args=(tem_gz, cases_gz, m_hat_norm_gz, N_H_GZ, cv_train, years_gz),
             maxiter=300, seed=42, tol=1e-8, polish=True, workers=1,
         )
-        cv_pred = seir_simulate(tem_gz, m_hat_norm_gz, *cv_res.x, N_H_GZ)
+        cv_pred = seir_simulate(tem_gz, m_hat_norm_gz, *cv_res.x, N_H_GZ,
+                                years=years_gz, cases_obs=cases_gz)
         cv_test_mask = ~cv_train
         if cv_test_mask.sum() > 0:
             met = evaluate_cases(cases_gz[cv_test_mask], cv_pred[cv_test_mask])
@@ -628,7 +623,8 @@ def main():
         cd = city_data[city]
         eta_c = city_etas[city]
         pred_raw = seir_simulate(
-            cd["tem"], cd["m_hat_norm"], c_opt, T_min_opt, T_max_opt, eta_c, cd["N_h"]
+            cd["tem"], cd["m_hat_norm"], c_opt, T_min_opt, T_max_opt, eta_c, cd["N_h"],
+            years=cd["years"], cases_obs=cd["cases"]
         )
 
         # Per-city scaling: fit on non-2014 data

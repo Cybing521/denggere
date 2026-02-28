@@ -1,0 +1,9 @@
+Equation: (-64.0761987357611 / (Hm + sqrt(Rm + R))) + ((sqrt(T) * (7.363467072692742 / Tm)) - (12.80238099285602 / H))
+Selected by: best multi-variable formula (T,H,R) with R²=0.2045, r=0.4618
+Complexity: 19
+Target: log1p(BI_relative) where BI_relative = BI / city_mean_BI
+
+Physical interpretation:
+  Term 1: sqrt(T) * 7.36 / Tm  — temperature-driven mosquito activity
+  Term 2: -12.80 / H           — higher humidity -> higher density
+  Term 3: -64.08 / (Hm + sqrt(Rm+R)) — precipitation modulation
